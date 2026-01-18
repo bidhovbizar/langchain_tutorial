@@ -1,6 +1,9 @@
 """
-LANGCHAIN_API_KEY="-------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"
-OPENAI_API_KEY="========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"
+Put the following in with the keys from 
+https://smith.langchain.com/o/cf120030-a960-4a67-a7b3-f19b80fb78ef/settings/apikeys
+LANGCHAIN_API_KEY="langsmithAPIkey"
+https://platform.openai.com/settings/organization/api-keys
+OPENAI_API_KEY="openAIAPIkey"
 """
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
