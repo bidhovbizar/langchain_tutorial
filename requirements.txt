@@ -1,0 +1,13 @@
+langchain
+langchain-openai
+langchain-ollama
+langchain-community
+streamlit
+dotenv
+langsmith 
+openevals 
+openai
+langserve 
+fastapi 
+uvicorn
+sse_starlette
