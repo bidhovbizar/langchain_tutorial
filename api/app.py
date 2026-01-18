@@ -1,3 +1,11 @@
+"""
+This is the API server that exposes endpoints to interact with different LLMs and prompts.
+To run this in bash run
+python app.py
+
+Remember that this is only the api server. 
+You need to start the client written in streamlit separately to interact with this server at port 8501
+"""
 from fastapi import FastAPI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
@@ -14,17 +22,12 @@ if os.getenv("OPENAI_API_KEY") is None:
 if os.getenv("LANGCHAIN_API_KEY") is None:
     print("LANGCHAIN_API_KEY is not set")
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGSMITH_PROJECT"] = "Tutorial3"
 
 app = FastAPI(
     title="Langchain Server",
     version="1.0",
-    description="A simple API server"
-)
-
-add_routes(
-    app,
-    ChatOpenAI(model="gpt-3.5-turbo"),
-    path="/openai")
+    description="A simple API server")
 
 model = ChatOpenAI(model="gpt-3.5-turbo")
 llm = OllamaLLM(model="llama3.2")
@@ -33,16 +36,28 @@ prompt1 = ChatPromptTemplate.from_template("Please write me an 20 word essay on 
 prompt2 = ChatPromptTemplate.from_template("Please write me a 4 line poem on {topic}")
 
 add_routes(
-        app,
-        prompt1|model,
-        path="/essay")
+    app,
+    ChatOpenAI(model="gpt-3.5-turbo"),
+    path="/openai")
 
 add_routes(
-        app,
-        prompt2|llm,
-        path="/poem")
+    app,
+    prompt1|model,
+    path="/essay")
+
+add_routes(
+    app,
+    prompt2|llm,
+    path="/poem")
 
 if __name__=="__main__":
     uvicorn.run(app,
-                host="localhost",
+                # To make the api only be visible from within the system at localhost or 127.0.0.1 use the following host
+                #host="localhost",
+                # 0.0.0.0 means open all ipv4 ips, LAN, localhost, VPN, docker and not just localhost
+                host="0.0.0.0",
+                # API listens only on the lan interfaces
+                #host = "10.104.117.59",
+                # To open to ipv6 use the following host
+                # host = "::"
                 port=8000)
