@@ -1,0 +1,24 @@
+# Requirements for Test Report Analyzer Web Application
+
+# Web Framework
+streamlit>=1.30.0
+
+# HTTP Requests
+requests>=2.31.0
+
+# HTML Parsing
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# AI/LLM Integration
+langchain>=0.1.0
+langchain-openai>=0.0.5
+langchain-core>=0.1.0
+
+# Environment Management
+python-dotenv>=1.0.0
+
+# Optional but recommended
+pandas>=2.0.0  # For future data analysis features
+plotly>=5.18.0  # For future visualization features
+

@@ -33,30 +33,44 @@ os.environ["LANGSMITH_PROJECT"] = "Tutorial3"
 # Configuration
 DEFAULT_REPORT = "test_report_7499.txt"
 
-# OAuth2 credentials for Cisco identity service
-# Please reach out for client_id and client_secret
-CLIENT_ID = ''
-CLIENT_SECRET = ''
-
 # Cisco Brain configuration
 CISCO_OPENAI_APP_KEY = 'egai-prd-networking-123120833-summarize-1768589443863'
 CISCO_BRAIN_USER_ID = 'bbizar'
 
-# Hardcoded token (for development - in production, get fresh token)
-ACCESS_TOKEN = "eyJraWQiOiI5NGU4cmxzTzUyUmhoc1RfWDNVMkRvb1lFS2xRTzZlaFRaM3NVajBVUXpnIiwiYWxnIjoiUlMyNTYifQ.eyJ2ZXIiOjEsImp0aSI6IkFULmdaeThCLWY1bkJ5VEVXLV9LbXY1ajdYUmk0SUFMbXFzVWR4Z0ZvdnFKU1UiLCJpc3MiOiJodHRwczovL2lkLmNpc2NvLmNvbS9vYXV0aDIvZGVmYXVsdCIsImF1ZCI6ImFwaTovL2RlZmF1bHQiLCJpYXQiOjE3Njg5OTY1MDUsImV4cCI6MTc2OTAwMDEwNSwiY2lkIjoiMG9hc2lqdGh0MEtKdzk5ZFc1ZDciLCJzY3AiOlsiY3VzdG9tc2NvcGUiXSwic3ViIjoiMG9hc2lqdGh0MEtKdzk5ZFc1ZDciLCJhenAiOiIwb2FzaWp0aHQwS0p3OTlkVzVkNyJ9.JxUg1NmNpj6RbWuNSjbLciL2Wp_WiaGhxHk8D7cwiu73LrN7Qpjv2eMbxsegUK-0T-Fm_ON75bR8fSRzPMHuFvFw0APnyDo8uQCxzdcLQaFIZP7XQwY-J5AfXK1sJViV-NZRO_cMlwRje4YOsKUQXS6z-ww19hDuikgX4CdpKko4NG3ocmyB5xThmFxvJ99xTTbLm_O22h2E7Xe-n3-4lTlxDK6ZJlm7vT1CFGfdVmiZzN4YjW8n0XA2XhuPoOWPekZKhR94aKBG7-gWdOvjhNDRo2W9Vo6rYPNoWjAXRSJuDushGYB9wZRNwRzcPgcHgmzq8r-71G65q7MILaQGLA"
+# OAuth2 credentials for Cisco identity service
+CLIENT_ID = '0oasijtht0KJw99dW5d7'
+CLIENT_SECRET = 'T3Pe7CWYpM2DSadIfVOYhQykxGG-Mz-fR_EKTGzTwBwFB1Fy0u_HaknaSudq9E5D'
+
+# Token cache (stored globally to avoid regenerating)
+_TOKEN_CACHE = {
+    'access_token': None,
+    'expires_at': 0  # Unix timestamp
+}
 
 
-def get_oauth_token(client_id, client_secret):
+def get_oauth_token(client_id, client_secret, force_refresh=False):
     """
-    Get OAuth2 access token from Cisco identity service.
+    Get OAuth2 access token from Cisco identity service with intelligent caching.
+    Token is cached for 1 hour and only refreshed when expired or forced.
     
     Args:
         client_id: OAuth2 client ID
         client_secret: OAuth2 client secret
+        force_refresh: Force getting a new token even if cached one is valid
         
     Returns:
         str: Access token
     """
+    import time
+    
+    # Check if we have a valid cached token
+    if not force_refresh and _TOKEN_CACHE['access_token'] and _TOKEN_CACHE['expires_at'] > time.time():
+        remaining = int(_TOKEN_CACHE['expires_at'] - time.time())
+        print(f"Using cached token (valid for {remaining} more seconds)")
+        return _TOKEN_CACHE['access_token']
+    
+    # Need to get a new token
+    print("Fetching new OAuth token...")
     url = "https://id.cisco.com/oauth2/default/v1/token"
     payload = "grant_type=client_credentials"
     
@@ -71,13 +85,62 @@ def get_oauth_token(client_id, client_secret):
     }
     
     try:
-        response = requests.post(url, headers=headers, data=payload)
+        response = requests.post(url, headers=headers, data=payload, timeout=10)
         response.raise_for_status()
-        return response.json()["access_token"]
+        
+        token_data = response.json()
+        access_token = token_data["access_token"]
+        expires_in = token_data.get("expires_in", 3600)  # Default 1 hour
+        
+        # Cache the token with expiration time (subtract 60 seconds as buffer)
+        _TOKEN_CACHE['access_token'] = access_token
+        _TOKEN_CACHE['expires_at'] = time.time() + expires_in - 60
+        
+        print(f"✅ New token obtained (valid for {expires_in} seconds)")
+        return access_token
+        
     except Exception as e:
-        print(f"Warning: Could not get fresh token: {e}")
-        print("Using hardcoded token instead...")
-        return ACCESS_TOKEN
+        print(f"❌ Error: Could not get fresh token: {e}")
+        raise
+
+
+def test_token_validity(access_token):
+    """
+    Test if the access token is valid by sending a simple test message.
+    
+    Args:
+        access_token: OAuth2 access token to test
+        
+    Returns:
+        bool: True if token is valid, False if expired/invalid
+    """
+    try:
+        # Initialize LLM with the token
+        test_llm = AzureChatOpenAI(
+            deployment_name="gpt-4.1",
+            azure_endpoint='https://chat-ai.cisco.com',
+            api_key=access_token,
+            api_version="2023-08-01-preview",
+            model_kwargs=dict(
+                user=f'{{"appkey": "{CISCO_OPENAI_APP_KEY}", "user": "{CISCO_BRAIN_USER_ID}"}}'
+            )
+        )
+        
+        # Send a simple test message
+        test_message = HumanMessage(content="Hi")
+        response = test_llm.invoke([test_message])
+        
+        # If we get here, token is valid
+        return True
+        
+    except Exception as e:
+        error_str = str(e)
+        # Check if it's an authentication error
+        if "401" in error_str or "Expired" in error_str or "Authentication" in error_str:
+            return False
+        # For other errors, assume token might be valid but something else failed
+        print(f"Warning: Token test failed with: {e}")
+        return False
 
 
 def initialize_llm(access_token):
@@ -159,9 +222,43 @@ Please provide a well-structured analysis with clear sections for:
     return [system_message, human_message]
 
 
+def create_quick_summary_prompt(report_content):
+    """
+    Create a simpler prompt for quick summarization.
+    
+    Args:
+        report_content: Content of the test report
+        
+    Returns:
+        list: List of messages for the LLM
+    """
+    system_message = SystemMessage(content="""You are an expert QA engineer who provides concise test summaries. 
+Your role is to quickly summarize test results, highlighting:
+1. Overall pass/fail statistics
+2. Which tests failed
+3. Brief description of failures
+4. Any critical issues that need immediate attention""")
+    
+    human_message = HumanMessage(content=f"""Please provide a concise summary of this test report. 
+Focus on:
+- Overall test statistics
+- List of failed tests
+- Brief description of each failure
+- Any patterns you notice
+
+Keep the summary concise but informative.
+
+Test Report:
+{report_content}
+
+Provide a clear, well-organized summary.""")
+    
+    return [system_message, human_message]
+
+
 def analyze_report(llm, report_content):
     """
-    Send the report to the LLM for analysis.
+    Send the report to the LLM for detailed analysis.
     
     Args:
         llm: Initialized AzureChatOpenAI instance
@@ -172,7 +269,121 @@ def analyze_report(llm, report_content):
     """
     messages = create_analysis_prompt(report_content)
     
-    print("\n[Sending to Azure OpenAI for analysis...]")
+    print("\n[Sending to Azure OpenAI for detailed analysis...]")
+    response = llm.invoke(messages)
+    
+    return {
+        'content': response.content,
+        'metadata': response.response_metadata,
+        'message_id': response.id,
+        'usage': response.usage_metadata
+    }
+
+
+def quick_summarize_report(llm, report_content):
+    """
+    Send the report to the LLM for quick summarization.
+    
+    Args:
+        llm: Initialized AzureChatOpenAI instance
+        report_content: Content of the test report
+        
+    Returns:
+        dict: Analysis results containing content, metadata, and usage info
+    """
+    messages = create_quick_summary_prompt(report_content)
+    
+    print("\n[Sending to Azure OpenAI for quick summary...]")
+    response = llm.invoke(messages)
+    
+    return {
+        'content': response.content,
+        'metadata': response.response_metadata,
+        'message_id': response.id,
+        'usage': response.usage_metadata
+    }
+
+
+def create_comparison_prompt(report1_content, report2_content, build1_name, build2_name):
+    """
+    Create a specialized prompt for comparing two test reports.
+    
+    Args:
+        report1_content: Content of the first test report
+        report2_content: Content of the second test report
+        build1_name: Name of the first build
+        build2_name: Name of the second build
+        
+    Returns:
+        list: List of messages for the LLM
+    """
+    system_message = SystemMessage(content="""You are an expert QA engineer specializing in 
+comparative test analysis. Your role is to:
+1. Compare two test runs and identify similarities and differences
+2. Find common failure patterns across builds
+3. Identify regressions (new failures) and fixes (resolved failures)
+4. Detect flaky tests that fail intermittently
+5. Provide insights on overall quality trends
+6. Suggest root causes for common issues""")
+    
+    human_message = HumanMessage(content=f"""Please perform a detailed comparison of these two test runs.
+
+BUILD 1: {build1_name}
+{report1_content}
+
+BUILD 2: {build2_name}
+{report2_content}
+
+Provide a comprehensive comparison analysis with:
+
+1. OVERVIEW COMPARISON
+   - Test counts and pass rates for each build
+   - Overall quality trend (improving/declining/stable)
+
+2. COMMON FAILURES
+   - Tests that failed in BOTH builds
+   - Likely indicating persistent issues
+   - Potential root causes
+
+3. REGRESSIONS (New Failures)
+   - Tests that passed in Build 1 but failed in Build 2
+   - Possible causes for these new failures
+
+4. FIXES (Resolved Failures)
+   - Tests that failed in Build 1 but passed in Build 2
+   - What might have been fixed
+
+5. FLAKY TESTS
+   - Tests with inconsistent results
+   - Tests that might need stability improvements
+
+6. PATTERNS & INSIGHTS
+   - Common failure patterns across both builds
+   - Infrastructure or environment issues
+   - Recommendations for improvement
+
+Please provide a clear, well-structured analysis.""")
+    
+    return [system_message, human_message]
+
+
+def compare_reports(llm, report1_content, report2_content, build1_name, build2_name):
+    """
+    Compare two test reports using AI analysis.
+    
+    Args:
+        llm: Initialized AzureChatOpenAI instance
+        report1_content: Content of the first test report
+        report2_content: Content of the second test report
+        build1_name: Name of the first build
+        build2_name: Name of the second build
+        
+    Returns:
+        dict: Comparison results containing content, metadata, and usage info
+    """
+    messages = create_comparison_prompt(report1_content, report2_content, build1_name, build2_name)
+    
+    print(f"\n[Sending to Azure OpenAI for comparison analysis of {build1_name} vs {build2_name}...]")
     response = llm.invoke(messages)
     
     return {
@@ -277,14 +488,15 @@ def main():
         print(f"\n❌ Error: {e}")
         return 1
     
-    # Step 2: Get OAuth token (or use hardcoded one)
+    # Step 2: Get OAuth token
     print("\n[2/4] Authenticating with Cisco identity service...")
     if CLIENT_ID and CLIENT_SECRET:
         access_token = get_oauth_token(CLIENT_ID, CLIENT_SECRET)
+        print("✅ Authentication successful")
     else:
-        print("⚠️  No client credentials provided, using hardcoded token")
-        access_token = ACCESS_TOKEN
-    print("✅ Authentication successful")
+        print("❌ Error: CLIENT_ID and CLIENT_SECRET not configured")
+        print("Please update the credentials in circuit_langchain_summarizer.py")
+        return 1
     
     # Step 3: Initialize LLM
     print("\n[3/4] Initializing Azure OpenAI (GPT-4.1)...")
@@ -321,4 +533,5 @@ def main():
 if __name__ == "__main__":
     exit_code = main()
     sys.exit(exit_code)
+
 
