@@ -1,0 +1,63 @@
+'''
+OPENAI_API_VERSION=??
+AZURE_OPENAI_API_VERSION="access token"
+AZURE_OPENAI_ENDPOINT="https://chat-ai.cisco.com/"
+'''
+
+import os
+import requests
+import json
+import openai
+from langchain.chat_models import AzureChatOpenAI
+import traceback
+
+# Please reach out for clientid,clientsecret
+
+import base64
+
+client_id = ''
+client_secret = ''
+# print(base64.b64encode(f'{client_id}:{client_secret}'.encode('utf-8')).decode('utf-8'))
+
+url = "https://id.cisco.com/oauth2/default/v1/token"
+
+payload = "grant_type=client_credentials"
+value = base64.b64encode(f'{client_id}:{client_secret}'.encode('utf-8')).decode('utf-8')
+headers = {
+    "Accept": "*/*",
+    "Content-Type": "application/x-www-form-urlencoded",
+    "Authorization": f"Basic {value}"
+}
+
+#token_response = requests.request("POST", url, headers=headers, data=payload)
+token_response = "eyJraWQiOiI5NGU4cmxzTzUyUmhoc1RfWDNVMkRvb1lFS2xRTzZlaFRaM3NVajBVUXpnIiwiYWxnIjoiUlMyNTYifQ.eyJ2ZXIiOjEsImp0aSI6IkFULkdHamNoVDBPWUFBWGZVYl9PLUhHdDIweFV0eC1wOWZmTmNtUTlaSWR3V28iLCJpc3MiOiJodHRwczovL2lkLmNpc2NvLmNvbS9vYXV0aDIvZGVmYXVsdCIsImF1ZCI6ImFwaTovL2RlZmF1bHQiLCJpYXQiOjE3Njg5OTI2NTMsImV4cCI6MTc2ODk5NjI1MywiY2lkIjoiMG9hc2lqdGh0MEtKdzk5ZFc1ZDciLCJzY3AiOlsiY3VzdG9tc2NvcGUiXSwic3ViIjoiMG9hc2lqdGh0MEtKdzk5ZFc1ZDciLCJhenAiOiIwb2FzaWp0aHQwS0p3OTlkVzVkNyJ9.ihG-fYi1ec5g-DVNge8zeNThvB2IIGExaKl2NEMuMAbfTAwkXSeQF8_oFoyJ21aTQR4awEu_08iSEQ8hjDrL4H4GdKcinM3lHBNW4C2eNGYRXVl2rccVl9SaG1F_CDcLcGnp-2nnF-Or3CMNhBmHDDtpWW1vPE9w8JLHwyzVNLJcgmiJrbETKtvrveeqYZGWfZWJ6tJmAuYgTjK7O2FghZPO2jTXPoQE4sdZ9AMrrbaUS6NWn72zLZCz297cJ3-RMIiH9IBqdiLTyJlS-q3re4IIJuIqPwmTpODGVjzlhtNHnupogJ5ETA2OAoAlpKTbRzyyVEIieYuWMVcIn_fA3g"
+
+# print(token_response.text)
+
+openai.api_type = "azure"
+
+CISCO_OPENAI_APP_KEY = 'egai-prd-networking-123120833-summarize-1768589443863'
+# your used id
+CISCO_BRAIN_USER_ID = 'bbizar'
+
+llm = AzureChatOpenAI(deployment_name="gpt-35-turbo", 
+                      azure_endpoint = 'https://chat-ai.cisco.com', 
+                      api_key=token_response.json()["access_token"],  
+                      api_version="2023-08-01-preview",
+                      model_kwargs=dict(
+                      user=f'{{"appkey": "{CISCO_OPENAI_APP_KEY}", "user": "{CISCO_BRAIN_USER_ID}"}}'
+                    )
+       )
+
+from langchain.schema import (
+    AIMessage,
+    HumanMessage,
+    SystemMessage
+)
+
+messages = [
+    SystemMessage(content="You are a helpful assistant"),
+    HumanMessage(content="I love information.")
+]
+
+llm([HumanMessage(content='What is gpt?')])
