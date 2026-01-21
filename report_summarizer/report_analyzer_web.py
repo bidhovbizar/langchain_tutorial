@@ -36,21 +36,22 @@ st.set_page_config(
 # Custom CSS for compact, information-dense styling
 st.markdown("""
 <style>
-    /* Reduce overall app padding */
+    /* Reduce overall app padding but keep top padding for header visibility */
     .block-container {
-        padding-top: 1rem !important;
+        padding-top: 2rem !important;
         padding-bottom: 0rem !important;
         padding-left: 2rem !important;
         padding-right: 2rem !important;
     }
     
-    /* Compact headers */
+    /* Compact headers - ensure main header is fully visible */
     .main-header {
         font-size: 1.8rem;
         font-weight: bold;
         color: #1f77b4;
         text-align: center;
-        padding: 0.3rem 0;
+        padding: 0.5rem 0;
+        margin-top: 0.5rem;
         margin-bottom: 0.5rem;
     }
     
@@ -311,7 +312,9 @@ def run_analysis(index_path: Path, analysis_mode: str, build_info: dict, url: st
         st.write("📊 Step 1/3: Extracting errors from test results...")
         
         analyzer = AnalyzerWrapper()
-        fetch_logs = (analysis_mode.lower() == "full")
+        # Always fetch logs for both Quick and Full modes
+        # Only the AI prompt differs between modes, not the error report
+        fetch_logs = True
         
         success, report_path, analyzer_results = analyzer.analyze(
             index_path,
@@ -380,28 +383,87 @@ def display_results(results: dict):
     st.markdown("---")
     st.markdown("### 📊 Analysis Results")
     
-    # Summary statistics
+    # Summary statistics - showing FAILED and SKIPPED separately
     analyzer_results = results['analyzer']
     
-    col1, col2, col3, col4 = st.columns(4)
+    # Create 5 columns for Total, Passed, Failed, Skipped, Mode
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     total_tests = analyzer_results.get('total_tests', 0)
-    failed_tests = analyzer_results.get('failed_tests', 0)
-    passed_tests = total_tests - failed_tests
-    pass_rate = (passed_tests / total_tests * 100) if total_tests > 0 else 0
+    
+    # Parse failures array to separate FAILED from SKIPPED
+    failures = analyzer_results.get('failures', [])
+    actual_failed = 0
+    actual_skipped = 0
+    
+    for failure in failures:
+        status = failure.get('status', '').upper()
+        if 'SKIP' in status:
+            actual_skipped += 1
+        else:
+            actual_failed += 1
+    
+    # If failures array is empty or analyzer returns separate counts, use those
+    if not failures:
+        # Fallback to analyzer-provided counts (if available)
+        actual_failed = analyzer_results.get('failed_tests', 0)
+        actual_skipped = analyzer_results.get('skipped_tests', 0)
+        # If skipped_tests is not provided, assume failed_tests might include both
+        if actual_skipped == 0 and 'skipped_tests' not in analyzer_results:
+            # Can't separate, show warning
+            actual_failed = analyzer_results.get('failed_tests', 0)
+    
+    passed_tests = total_tests - actual_failed - actual_skipped
+    
+    # Calculate rates (excluding skipped from denominator)
+    testable_count = total_tests - actual_skipped
+    pass_rate = (passed_tests / testable_count * 100) if testable_count > 0 else 0
+    fail_rate = (actual_failed / testable_count * 100) if testable_count > 0 else 0
+    skip_rate = (actual_skipped / total_tests * 100) if total_tests > 0 else 0
     
     with col1:
-        st.metric("Total Tests", total_tests)
+        st.metric("Total", total_tests)
     
     with col2:
-        st.metric("Passed", passed_tests, delta=f"{pass_rate:.1f}%")
+        st.metric("✅ Passed", passed_tests, delta=f"{pass_rate:.1f}%")
     
     with col3:
-        st.metric("Failed", failed_tests, delta=f"-{100-pass_rate:.1f}%", delta_color="inverse")
+        st.metric("❌ Failed", actual_failed, delta=f"{fail_rate:.1f}%", delta_color="inverse")
     
     with col4:
+        st.metric("⏭️ Skipped", actual_skipped, delta=f"{skip_rate:.1f}%", delta_color="off")
+    
+    with col5:
         mode_emoji = "⚡" if results['mode'] == 'quick' else "🤖"
-        st.metric("Analysis Mode", f"{mode_emoji} {results['mode'].upper()}")
+        st.metric("Mode", f"{mode_emoji} {results['mode'].upper()}")
+    
+    # Display test configuration metadata
+    summary = analyzer_results.get('summary', {})
+    if summary:
+        # Display metadata in a compact expander
+        with st.expander("📋 Test Configuration Details", expanded=False):
+            # Create columns for metadata
+            meta_col1, meta_col2 = st.columns(2)
+            
+            with meta_col1:
+                # Left column
+                if 'Test_bed' in summary:
+                    st.markdown(f"**🖥️ Test Bed:** `{summary['Test_bed']}`")
+                if 'Start_time' in summary:
+                    st.markdown(f"**⏰ Start Time:** `{summary['Start_time']}`")
+                if 'Test_duration' in summary:
+                    st.markdown(f"**⏱️ Duration:** `{summary['Test_duration']}`")
+            
+            with meta_col2:
+                # Right column
+                if 'Script_execution_server' in summary:
+                    st.markdown(f"**🖧 Execution Server:** `{summary['Script_execution_server']}`")
+                if 'Stop_time' in summary:
+                    st.markdown(f"**🏁 Stop Time:** `{summary['Stop_time']}`")
+                if 'Qali_id' in summary:
+                    st.markdown(f"**🔖 Qali ID:** `{summary['Qali_id']}`")
+                if 'Comment' in summary:
+                    st.markdown(f"**💬 Comment:** `{summary['Comment']}`")
     
     # Display summary/analysis
     st.markdown("---")
@@ -461,6 +523,15 @@ def display_results(results: dict):
             mime="text/plain",
             use_container_width=True
         )
+    
+    # Add "Back to Main Input" button
+    st.markdown("---")
+    if st.button("🏠 Back to Main Input", use_container_width=True):
+        # Clear all state to return to input screen
+        st.session_state.analysis_complete = False
+        st.session_state.current_results = None
+        st.session_state.current_url = ""
+        st.rerun()
 
 
 def display_history():
@@ -545,16 +616,22 @@ def display_comparison():
     # Display quick stats comparison in compact table format
     st.markdown("#### 📊 Quick Statistics")
     
-    # Build comparison table
+    # Build comparison table with FAILED and SKIPPED separate
     table_rows = []
     for entry_data in comparison['entries']:
         build_name = entry_data['build_name']
         total = entry_data['total_tests']
         failed = entry_data['failed_tests']
-        passed = total - failed
-        pass_rate = (passed / total * 100) if total > 0 else 0
+        skipped = entry_data.get('skipped_tests', 0)  # Get skipped count
+        passed = total - failed - skipped
         
-        # Add emoji indicator
+        # Calculate rates
+        testable = total - skipped
+        pass_rate = (passed / testable * 100) if testable > 0 else 0
+        fail_rate = (failed / testable * 100) if testable > 0 else 0
+        skip_rate = (skipped / total * 100) if total > 0 else 0
+        
+        # Add emoji indicator based on pass rate
         if pass_rate >= 95:
             status = "✅"
         elif pass_rate >= 85:
@@ -562,11 +639,11 @@ def display_comparison():
         else:
             status = "❌"
         
-        table_rows.append(f"| {status} **{build_name}** | {total} | {passed} | {failed} | **{pass_rate:.1f}%** |")
+        table_rows.append(f"| {status} **{build_name}** | {total} | {passed} ({pass_rate:.1f}%) | {failed} ({fail_rate:.1f}%) | {skipped} ({skip_rate:.1f}%) |")
     
-    # Display compact table
-    st.markdown("| Build | Total | Passed | Failed | Pass Rate |")
-    st.markdown("|-------|-------|--------|--------|-----------|")
+    # Display compact table with separate FAILED and SKIPPED columns
+    st.markdown("| Build | Total | ✅ Passed | ❌ Failed | ⏭️ Skipped |")
+    st.markdown("|-------|-------|-----------|-----------|------------|")
     for row in table_rows:
         st.markdown(row)
     
@@ -658,10 +735,23 @@ def display_comparison():
     
     st.markdown("---")
     
-    # Back button
-    if st.button("← Back to Results", use_container_width=True):
-        st.session_state.show_comparison = False
-        st.rerun()
+    # Navigation buttons
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🏠 Back to Main Input", use_container_width=True):
+            # Clear all state to return to input screen
+            st.session_state.show_comparison = False
+            st.session_state.analysis_complete = False
+            st.session_state.current_results = None
+            st.session_state.current_url = ""
+            st.rerun()
+    
+    with col2:
+        if st.button("← Back to Results", use_container_width=True):
+            # Just go back to results view
+            st.session_state.show_comparison = False
+            st.rerun()
 
 
 def main():

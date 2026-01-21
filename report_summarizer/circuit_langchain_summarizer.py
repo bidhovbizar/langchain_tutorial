@@ -197,27 +197,48 @@ def create_analysis_prompt(report_content):
     """
     system_message = SystemMessage(content="""You are an expert test automation engineer specializing in 
 analyzing test failure reports. Your role is to:
-1. Identify and categorize test failures
+1. Identify and categorize test FAILURES and SKIPS separately
 2. Extract root causes from error messages and stack traces
 3. Provide concise, actionable summaries
-4. Highlight patterns in failures
-5. Suggest potential fixes or areas for investigation""")
+4. Highlight patterns in failures and skips
+5. Suggest potential fixes or areas for investigation
+
+CRITICAL: Analyze FAILED tests and SKIPPED tests SEPARATELY:
+- FAILED tests = actual test failures (code bugs, logic errors, assertion failures)
+- SKIPPED tests = environment/infrastructure issues (device unavailable, cloud problems, prerequisites not met)""")
     
-    human_message = HumanMessage(content=f"""Please analyze this test report and provide a comprehensive summary 
-focusing on the failures. For each failure, explain:
-1. What test failed and in which suite
-2. The root cause of the failure (based on error messages)
-3. Any patterns or commonalities between failures
-4. Recommendations for fixing the issues
+    human_message = HumanMessage(content=f"""Please analyze this test report with FAILED and SKIPPED tests analyzed SEPARATELY.
 
 Test Report:
 {report_content}
 
-Please provide a well-structured analysis with clear sections for:
-- Overall Test Summary
-- Failure Analysis (grouped by root cause if possible)
-- Key Findings
-- Recommendations""")
+Provide analysis with these DISTINCT sections:
+
+1. OVERALL TEST SUMMARY
+   - Total tests, passed, failed, skipped counts
+   - Pass rate (excluding skipped)
+
+2. FAILED TESTS ANALYSIS (Code/Logic Issues)
+   - List each FAILED test with its suite
+   - Root cause for each (code bugs, assertion failures, logic errors)
+   - Patterns or commonalities between failures
+   - Recommendations for code/test fixes
+
+3. SKIPPED TESTS ANALYSIS (Environment/Infrastructure Issues)  
+   - List each SKIPPED test with its suite
+   - Reason for skip (device state, cloud issues, missing prerequisites)
+   - Patterns in skips (e.g., "all tests on device X", "all cloud-dependent tests")
+   - Recommendations for environment/infrastructure fixes
+
+4. KEY FINDINGS
+   - Critical issues needing immediate attention
+   - Environment vs. Code issue breakdown
+
+5. ACTIONABLE RECOMMENDATIONS
+   - For FAILED: Code fixes, test improvements, logic corrections
+   - For SKIPPED: Device maintenance, infrastructure fixes, environment setup
+
+Keep FAILED and SKIPPED completely separate to clearly identify whether issues are code-related or environment-related.""")
     
     return [system_message, human_message]
 
@@ -234,24 +255,33 @@ def create_quick_summary_prompt(report_content):
     """
     system_message = SystemMessage(content="""You are an expert QA engineer who provides concise test summaries. 
 Your role is to quickly summarize test results, highlighting:
-1. Overall pass/fail statistics
-2. Which tests failed
-3. Brief description of failures
-4. Any critical issues that need immediate attention""")
-    
-    human_message = HumanMessage(content=f"""Please provide a concise summary of this test report. 
-Focus on:
-- Overall test statistics
-- List of failed tests
-- Brief description of each failure
-- Any patterns you notice
+1. Overall pass/fail/skip statistics
+2. Which tests failed vs. which were skipped
+3. Brief description of failures and skips
+4. Any critical issues that need immediate attention
 
-Keep the summary concise but informative.
+IMPORTANT: Distinguish between FAILED and SKIPPED tests:
+- FAILED = code/logic issues
+- SKIPPED = environment/infrastructure issues""")
+    
+    human_message = HumanMessage(content=f"""Please provide a concise summary of this test report with FAILED and SKIPPED tests listed separately.
 
 Test Report:
 {report_content}
 
-Provide a clear, well-organized summary.""")
+Provide a brief summary with two sections:
+
+1. FAILED TESTS (Code Issues)
+   - Count and list of failed tests
+   - Brief description of each failure
+   - Any patterns
+
+2. SKIPPED TESTS (Environment Issues)
+   - Count and list of skipped tests  
+   - Brief reason for each skip
+   - Any patterns (e.g., all on same device/cloud)
+
+Keep it concise but clearly separate FAILED from SKIPPED.""")
     
     return [system_message, human_message]
 
@@ -320,13 +350,17 @@ def create_comparison_prompt(report1_content, report2_content, build1_name, buil
     system_message = SystemMessage(content="""You are an expert QA engineer specializing in 
 comparative test analysis. Your role is to:
 1. Compare two test runs and identify similarities and differences
-2. Find common failure patterns across builds
-3. Identify regressions (new failures) and fixes (resolved failures)
+2. Find common FAILURE patterns and SKIP patterns across builds
+3. Identify regressions (new failures/skips) and fixes (resolved failures/skips)
 4. Detect flaky tests that fail intermittently
 5. Provide insights on overall quality trends
-6. Suggest root causes for common issues""")
+6. Suggest root causes for issues
+
+CRITICAL: Analyze FAILED and SKIPPED tests separately:
+- FAILED = code/logic issues
+- SKIPPED = environment/infrastructure issues""")
     
-    human_message = HumanMessage(content=f"""Please perform a detailed comparison of these two test runs.
+    human_message = HumanMessage(content=f"""Please perform a detailed comparison of these two test runs, analyzing FAILED and SKIPPED separately.
 
 BUILD 1: {build1_name}
 {report1_content}
@@ -337,32 +371,36 @@ BUILD 2: {build2_name}
 Provide a comprehensive comparison analysis with:
 
 1. OVERVIEW COMPARISON
-   - Test counts and pass rates for each build
+   - Test counts (total, passed, failed, skipped) for each build
+   - Pass rate and skip rate trends
    - Overall quality trend (improving/declining/stable)
 
-2. COMMON FAILURES
-   - Tests that failed in BOTH builds
-   - Likely indicating persistent issues
-   - Potential root causes
+2. FAILED TESTS COMPARISON (Code Issues)
+   - Common failures in BOTH builds (persistent code issues)
+   - New failures in Build 2 (code regressions)
+   - Resolved failures in Build 2 (code fixes)
+   - Patterns in failed tests
 
-3. REGRESSIONS (New Failures)
-   - Tests that passed in Build 1 but failed in Build 2
-   - Possible causes for these new failures
+3. SKIPPED TESTS COMPARISON (Environment Issues)
+   - Common skips in BOTH builds (persistent environment issues)
+   - New skips in Build 2 (environment degradation)
+   - Resolved skips in Build 2 (environment fixes)
+   - Patterns in skips (e.g., specific devices, cloud dependencies)
 
-4. FIXES (Resolved Failures)
-   - Tests that failed in Build 1 but passed in Build 2
-   - What might have been fixed
-
-5. FLAKY TESTS
-   - Tests with inconsistent results
+4. FLAKY TESTS
+   - Tests with inconsistent results (pass/fail/skip varies)
    - Tests that might need stability improvements
 
-6. PATTERNS & INSIGHTS
-   - Common failure patterns across both builds
-   - Infrastructure or environment issues
-   - Recommendations for improvement
+5. ENVIRONMENT vs. CODE HEALTH
+   - Is quality declining due to code issues or environment issues?
+   - Which is more critical to address?
 
-Please provide a clear, well-structured analysis.""")
+6. ACTIONABLE RECOMMENDATIONS
+   - For FAILED tests: Code fixes needed
+   - For SKIPPED tests: Infrastructure/device fixes needed
+   - Priority order
+
+Keep FAILED and SKIPPED analysis completely separate to identify whether problems are code-related or environment-related.""")
     
     return [system_message, human_message]
 

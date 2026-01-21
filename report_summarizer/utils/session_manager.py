@@ -147,21 +147,58 @@ class SessionManager:
         except:
             time_str = timestamp
         
-        # Get test stats
+        # Get test stats with FAIL and SKIP separate
         analyzer_results = entry.get('analyzer_results', {})
         total_tests = analyzer_results.get('total_tests', 0)
         failed_tests = analyzer_results.get('failed_tests', 0)
+        skipped_tests = analyzer_results.get('skipped_tests', 0)
+        passed_tests = total_tests - failed_tests - skipped_tests
         
-        if total_tests > 0:
-            pass_rate = (1 - failed_tests / total_tests) * 100
+        # Calculate pass rate (excluding skipped)
+        testable = total_tests - skipped_tests
+        if testable > 0:
+            pass_rate = (passed_tests / testable) * 100
         else:
             pass_rate = 0
         
         mode = entry.get('analysis_mode', 'quick').upper()
         
+        # Extract testbed information for region/environment display
+        summary_data = analyzer_results.get('summary', {})
+        testbed = summary_data.get('Test_bed', '')
+        
+        # Parse testbed to extract region and environment
+        # Format: eu_central_1_staging_sars_api_20260120_104005
+        region = ''
+        environment = ''
+        if testbed:
+            parts = testbed.split('_')
+            # Try to identify region (e.g., eu_central_1, us_east_1, us_west_2)
+            if len(parts) >= 3:
+                # First 3 parts are usually the region (e.g., eu_central_1)
+                region = '_'.join(parts[:3])
+            # Try to identify environment (staging, qatest, production)
+            if len(parts) >= 4:
+                environment = parts[3]  # Usually 4th part is environment
+        
+        # Build summary with testbed info
         summary = f"**{build_name}**\n"
+        
+        # Add region and environment if available
+        if region or environment:
+            testbed_info = []
+            if region:
+                testbed_info.append(f"🌍 {region}")
+            if environment:
+                testbed_info.append(f"🏷️ {environment}")
+            summary += ' | '.join(testbed_info) + "\n"
+        
         summary += f"📅 {time_str} | 🔍 {mode}\n"
-        summary += f"✅ {total_tests - failed_tests}/{total_tests} passed ({pass_rate:.1f}%)"
+        summary += f"✅ {passed_tests}/{testable} passed ({pass_rate:.1f}%)"
+        
+        # Show skip info if there are skips
+        if skipped_tests > 0:
+            summary += f"\n⏭️ {skipped_tests} skipped"
         
         return summary
     
@@ -194,15 +231,32 @@ class SessionManager:
             build_name = entry['build_info'].get('build_name', 'Unknown')
             analyzer_results = entry.get('analyzer_results', {})
             
+            # Parse failures array to separate FAILED from SKIPPED
+            failures = analyzer_results.get('failures', [])
+            actual_failed = 0
+            actual_skipped = 0
+            
+            for failure in failures:
+                status = failure.get('status', '').upper()
+                if 'SKIP' in status:
+                    actual_skipped += 1
+                else:
+                    actual_failed += 1
+            
+            # If failures array is empty, use analyzer-provided counts
+            if not failures:
+                actual_failed = analyzer_results.get('failed_tests', 0)
+                actual_skipped = analyzer_results.get('skipped_tests', 0)
+            
             entry_data = {
                 'build_name': build_name,
                 'total_tests': analyzer_results.get('total_tests', 0),
-                'failed_tests': analyzer_results.get('failed_tests', 0),
+                'failed_tests': actual_failed,  # Separated count
+                'skipped_tests': actual_skipped,  # Separated count
                 'failures': []
             }
             
             # Extract failure names
-            failures = analyzer_results.get('failures', [])
             failure_names = set()
             
             for failure in failures:
