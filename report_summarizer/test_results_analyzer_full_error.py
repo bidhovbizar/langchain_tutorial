@@ -24,7 +24,7 @@ class TestResultsAnalyzer:
     """Analyzes test results from HTML files and extracts failure information"""
 
     # Test result statuses that indicate failures
-    FAILURE_STATUSES = {'FAIL', 'ERROR', 'NOT RUN', 'SETUP ERROR', 'CLEANUP ERROR', 'PLUGIN ERROR'}
+    FAILURE_STATUSES = {'FAIL', 'ERROR', 'NOT RUN', 'SETUP ERROR', 'CLEANUP ERROR', 'PLUGIN ERROR', 'SKIP'}
 
     def __init__(self, html_file: str, base_url: Optional[str] = None, verbose: bool = False):
         """

@@ -33,43 +33,179 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better styling
+# Custom CSS for compact, information-dense styling
 st.markdown("""
 <style>
+    /* Reduce overall app padding */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 0rem !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+    }
+    
+    /* Compact headers */
     .main-header {
-        font-size: 2.5rem;
+        font-size: 1.8rem;
         font-weight: bold;
         color: #1f77b4;
         text-align: center;
-        padding: 1rem 0;
+        padding: 0.3rem 0;
+        margin-bottom: 0.5rem;
     }
+    
+    h1 {
+        font-size: 1.6rem !important;
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.5rem !important;
+        padding-top: 0.3rem !important;
+    }
+    
+    h2 {
+        font-size: 1.3rem !important;
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.3rem !important;
+    }
+    
+    h3 {
+        font-size: 1.1rem !important;
+        margin-top: 0.3rem !important;
+        margin-bottom: 0.2rem !important;
+    }
+    
+    /* Compact metrics */
+    [data-testid="stMetricValue"] {
+        font-size: 1.2rem !important;
+    }
+    
+    [data-testid="stMetricLabel"] {
+        font-size: 0.8rem !important;
+    }
+    
+    [data-testid="stMetricDelta"] {
+        font-size: 0.7rem !important;
+    }
+    
+    /* Reduce spacing between elements */
+    .element-container {
+        margin-bottom: 0.3rem !important;
+    }
+    
+    /* Compact dividers */
+    hr {
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* Compact message boxes */
     .success-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
+        padding: 0.5rem;
+        border-radius: 0.3rem;
         background-color: #d4edda;
-        border-left: 5px solid #28a745;
-        margin: 1rem 0;
+        border-left: 3px solid #28a745;
+        margin: 0.3rem 0;
+        font-size: 0.9rem;
     }
     .error-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
+        padding: 0.5rem;
+        border-radius: 0.3rem;
         background-color: #f8d7da;
-        border-left: 5px solid #dc3545;
-        margin: 1rem 0;
+        border-left: 3px solid #dc3545;
+        margin: 0.3rem 0;
+        font-size: 0.9rem;
     }
     .info-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
+        padding: 0.5rem;
+        border-radius: 0.3rem;
         background-color: #d1ecf1;
-        border-left: 5px solid #17a2b8;
-        margin: 1rem 0;
+        border-left: 3px solid #17a2b8;
+        margin: 0.3rem 0;
+        font-size: 0.9rem;
     }
+    
+    /* Compact history cards */
     .history-card {
-        padding: 1rem;
-        border-radius: 0.5rem;
+        padding: 0.5rem;
+        border-radius: 0.3rem;
         background-color: #f8f9fa;
         border: 1px solid #dee2e6;
-        margin: 0.5rem 0;
+        margin: 0.3rem 0;
+        font-size: 0.85rem;
+    }
+    
+    /* Compact buttons */
+    .stButton button {
+        padding: 0.25rem 0.75rem !important;
+        font-size: 0.9rem !important;
+        height: 2rem !important;
+    }
+    
+    /* Compact download buttons */
+    .stDownloadButton button {
+        padding: 0.25rem 0.75rem !important;
+        font-size: 0.85rem !important;
+    }
+    
+    /* Compact expanders */
+    .streamlit-expanderHeader {
+        font-size: 0.95rem !important;
+        padding: 0.3rem !important;
+    }
+    
+    /* Compact sidebar */
+    section[data-testid="stSidebar"] {
+        width: 280px !important;
+    }
+    
+    section[data-testid="stSidebar"] .block-container {
+        padding: 1rem 0.5rem !important;
+    }
+    
+    /* Tighter line height for paragraphs */
+    p {
+        line-height: 1.4 !important;
+        margin-bottom: 0.3rem !important;
+    }
+    
+    /* Compact markdown */
+    .stMarkdown {
+        margin-bottom: 0.3rem !important;
+    }
+    
+    /* Reduce spacing in columns */
+    [data-testid="column"] {
+        padding: 0 0.5rem !important;
+    }
+    
+    /* Compact status messages */
+    .stAlert {
+        padding: 0.5rem !important;
+        margin: 0.3rem 0 !important;
+    }
+    
+    /* Compact tables */
+    table {
+        font-size: 0.85rem !important;
+    }
+    
+    th {
+        padding: 0.3rem 0.5rem !important;
+    }
+    
+    td {
+        padding: 0.3rem 0.5rem !important;
+    }
+    
+    /* Reduce spacing in text areas */
+    .stTextArea textarea {
+        font-size: 0.85rem !important;
+    }
+    
+    /* Compact code blocks */
+    pre {
+        padding: 0.5rem !important;
+        margin: 0.3rem 0 !important;
+        font-size: 0.8rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -97,12 +233,11 @@ def init_session_state():
 def display_header():
     """Display application header"""
     st.markdown('<p class="main-header">🔍 Test Report Analyzer & Summarizer</p>', unsafe_allow_html=True)
-    st.markdown("---")
 
 
 def display_url_input():
     """Display URL input section"""
-    st.subheader("📝 Enter Supernova URL")
+    st.markdown("#### 📝 Supernova URL")
     
     # Show examples
     with st.expander("📋 Click to see example URLs"):
@@ -243,7 +378,7 @@ def run_analysis(index_path: Path, analysis_mode: str, build_info: dict, url: st
 def display_results(results: dict):
     """Display analysis results"""
     st.markdown("---")
-    st.subheader("📊 Analysis Results")
+    st.markdown("### 📊 Analysis Results")
     
     # Summary statistics
     analyzer_results = results['analyzer']
@@ -274,9 +409,9 @@ def display_results(results: dict):
     summary_result = results['summary']
     
     if results['mode'] == 'quick':
-        st.subheader("⚡ Quick AI Summary")
+        st.markdown("#### ⚡ Quick AI Summary")
     else:
-        st.subheader("🔍 Detailed AI Analysis")
+        st.markdown("#### 🔍 Detailed AI Analysis")
     
     # Display the AI-generated content
     st.markdown(summary_result['content'])
@@ -294,10 +429,7 @@ def display_results(results: dict):
             with col3:
                 st.metric("Total Tokens", usage.get('total_tokens', 'N/A'))
     
-    # Download buttons
-    st.markdown("---")
-    st.subheader("💾 Download Options")
-    
+    # Download buttons (compact)
     col1, col2 = st.columns(2)
     
     with col1:
@@ -307,10 +439,11 @@ def display_results(results: dict):
                 report_content = f.read()
             
             st.download_button(
-                label="📄 Download Error Report",
+                label="📥 Error Report",
                 data=report_content,
                 file_name=Path(results['report_path']).name,
-                mime="text/plain"
+                mime="text/plain",
+                use_container_width=True
             )
         except:
             st.error("Error reading report file")
@@ -322,10 +455,11 @@ def display_results(results: dict):
         mode_label = "quick_summary" if results['mode'] == 'quick' else "full_analysis"
         
         st.download_button(
-            label="📄 Download Analysis",
+            label="📥 Analysis",
             data=analysis_content,
             file_name=f"{mode_label}_{results['entry_id']}.txt",
-            mime="text/plain"
+            mime="text/plain",
+            use_container_width=True
         )
 
 
@@ -392,7 +526,7 @@ def display_history():
 
 def display_comparison():
     """Display AI-powered comparison view"""
-    st.subheader("🔄 AI-Powered Build Comparison")
+    st.markdown("### 🔄 AI-Powered Build Comparison")
     
     selected = st.session_state.session_manager.get_selected_entries()
     
@@ -408,24 +542,38 @@ def display_comparison():
         st.error(comparison['error'])
         return
     
-    # Display quick stats comparison
-    st.markdown("### 📊 Quick Statistics")
+    # Display quick stats comparison in compact table format
+    st.markdown("#### 📊 Quick Statistics")
     
-    cols = st.columns(len(comparison['entries']))
+    # Build comparison table
+    table_rows = []
+    for entry_data in comparison['entries']:
+        build_name = entry_data['build_name']
+        total = entry_data['total_tests']
+        failed = entry_data['failed_tests']
+        passed = total - failed
+        pass_rate = (passed / total * 100) if total > 0 else 0
+        
+        # Add emoji indicator
+        if pass_rate >= 95:
+            status = "✅"
+        elif pass_rate >= 85:
+            status = "⚠️"
+        else:
+            status = "❌"
+        
+        table_rows.append(f"| {status} **{build_name}** | {total} | {passed} | {failed} | **{pass_rate:.1f}%** |")
     
-    for idx, entry_data in enumerate(comparison['entries']):
-        with cols[idx]:
-            st.markdown(f"**{entry_data['build_name']}**")
-            st.metric("Total Tests", entry_data['total_tests'])
-            st.metric("Failed", entry_data['failed_tests'])
-            
-            pass_rate = ((entry_data['total_tests'] - entry_data['failed_tests']) / entry_data['total_tests'] * 100) if entry_data['total_tests'] > 0 else 0
-            st.metric("Pass Rate", f"{pass_rate:.1f}%")
+    # Display compact table
+    st.markdown("| Build | Total | Passed | Failed | Pass Rate |")
+    st.markdown("|-------|-------|--------|--------|-----------|")
+    for row in table_rows:
+        st.markdown(row)
     
     st.markdown("---")
     
     # AI-Powered Comparison Analysis
-    st.markdown("### 🤖 AI Analysis")
+    st.markdown("#### 🤖 AI Analysis")
     
     # Check if we already have a comparison result in session state
     comparison_key = f"comparison_{'_'.join(sorted(entry_ids))}"
@@ -487,22 +635,26 @@ def display_comparison():
                 with col3:
                     st.metric("Total Tokens", usage.get('total_tokens', 'N/A'))
         
-        # Download button
-        st.markdown("---")
+        # Download and action buttons (side by side)
         builds = result.get('builds_compared', ['build1', 'build2'])
         comparison_filename = f"comparison_{builds[0]}_vs_{builds[1]}.txt"
         
-        st.download_button(
-            label="📄 Download Comparison Analysis",
-            data=result['content'],
-            file_name=comparison_filename,
-            mime="text/plain"
-        )
+        col1, col2 = st.columns(2)
         
-        # Clear comparison button
-        if st.button("🔄 Run New Comparison", use_container_width=True):
-            del st.session_state[comparison_key]
-            st.rerun()
+        with col1:
+            st.download_button(
+                label="📥 Download Comparison",
+                data=result['content'],
+                file_name=comparison_filename,
+                mime="text/plain",
+                use_container_width=True
+            )
+        
+        with col2:
+            # Clear comparison button
+            if st.button("🔄 Run New Comparison", use_container_width=True):
+                del st.session_state[comparison_key]
+                st.rerun()
     
     st.markdown("---")
     
