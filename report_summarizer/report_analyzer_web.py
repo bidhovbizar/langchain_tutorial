@@ -238,20 +238,24 @@ def display_header():
 
 def display_url_input():
     """Display URL input section"""
-    st.markdown("#### 📝 Supernova URL")
+    st.markdown("#### 📝 Test Results URL")
     
     # Show examples
-    with st.expander("📋 Click to see example URLs"):
+    with st.expander("📋 Click to see example URLs (Supernova & Reportio)"):
         examples = URLConverter.get_example_urls()
-        for i, url in enumerate(examples, 1):
+        st.markdown("**Supernova URLs:**")
+        for url in examples[:3]:  # First 3 are Supernova
+            st.code(url, language="text")
+        st.markdown("**Reportio URLs:**")
+        for url in examples[3:]:  # Remaining are Reportio
             st.code(url, language="text")
     
     # URL input
     url = st.text_input(
-        "Supernova Test Results URL:",
+        "Test Results URL (Supernova or Reportio):",
         value=st.session_state.current_url,
-        placeholder="https://supernova.cisco.com/logviewer/runtests/results/sanity/...",
-        help="Enter the URL to your test results detail.html page"
+        placeholder="https://supernova.cisco.com/... or http://reportio.cisco.com/...",
+        help="Enter the URL to your test results (supports both Supernova and Reportio URLs)"
     )
     
     col1, col2, col3 = st.columns([2, 2, 6])
@@ -280,9 +284,13 @@ def validate_and_convert_url(url: str):
         with st.status("🔄 Processing URL...", expanded=True) as status:
             # Step 1: Validate URL
             st.write("✓ Validating URL format...")
-            if not URLConverter.is_valid_supernova_url(url):
+            url_type = URLConverter.get_url_type(url)
+            if url_type == 'unknown':
+                st.error("Invalid URL. Must be a Supernova or Reportio URL.")
                 status.update(label="❌ Invalid URL", state="error")
                 return None, None
+            
+            st.write(f"✓ Detected URL type: {url_type.upper()}")
             
             # Step 2: Extract build info
             st.write("✓ Extracting build information...")
