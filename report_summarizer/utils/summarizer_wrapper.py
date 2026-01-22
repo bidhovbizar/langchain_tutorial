@@ -17,6 +17,8 @@ try:
         analyze_report,
         quick_summarize_report,
         compare_reports,
+        chat_with_report,
+        chat_with_comparison,
         test_token_validity,
         CLIENT_ID,
         CLIENT_SECRET
@@ -109,10 +111,10 @@ class SummarizerWrapper:
                     callback("Reading report file...")
                 report_content = read_report_file(report_path)
                 
-                # Analyze with AI
+                # Analyze with AI (callback will be used for chunk progress)
                 if callback:
-                    callback("Analyzing with AI (this may take 30-60 seconds)...")
-                analysis_result = analyze_report(self.llm, report_content)
+                    callback("Analyzing with AI...")
+                analysis_result = analyze_report(self.llm, report_content, callback=callback)
                 
                 self.last_analysis = analysis_result
                 
@@ -187,10 +189,10 @@ class SummarizerWrapper:
                     callback("Reading report file...")
                 report_content = read_report_file(report_path)
                 
-                # Quick summarize with AI (simpler prompt, faster)
+                # Quick summarize with AI (callback will be used for chunk progress)
                 if callback:
-                    callback("Generating quick AI summary (this may take 10-20 seconds)...")
-                summary_result = quick_summarize_report(self.llm, report_content)
+                    callback("Generating quick AI summary...")
+                summary_result = quick_summarize_report(self.llm, report_content, callback=callback)
                 
                 self.last_analysis = summary_result
                 
@@ -317,6 +319,163 @@ class SummarizerWrapper:
                     import traceback
                     traceback.print_exc()
                     return False, None, f"Comparison failed: {str(e)}"
+        
+        return False, None, "Failed after retrying with fresh token"
+    
+    def chat(
+        self,
+        report_content: str,
+        ai_summary: str,
+        chat_history: List[Dict],
+        user_question: str,
+        callback=None
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        """
+        Chat with AI about a test report.
+        
+        Args:
+            report_content: The full test report content
+            ai_summary: The AI-generated summary
+            chat_history: List of previous chat messages [{"role": "user/assistant", "content": "..."}]
+            user_question: The user's current question
+            callback: Optional callback function for progress updates
+            
+        Returns:
+            Tuple of (success, ai_response, error_message)
+        """
+        if not SUMMARIZER_AVAILABLE:
+            return False, None, "Summarizer module not available"
+        
+        max_retries = 2
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                # Initialize if not already done
+                if self.llm is None or retry_count > 0:
+                    if callback:
+                        callback("Initializing AI model...")
+                    
+                    force_refresh = (retry_count > 0)
+                    success, error = self.initialize(force_refresh=force_refresh)
+                    if not success:
+                        return False, None, error
+                
+                # Get AI response
+                if callback:
+                    callback("Getting AI response...")
+                
+                chat_result = chat_with_report(
+                    self.llm,
+                    report_content,
+                    ai_summary,
+                    chat_history,
+                    user_question
+                )
+                
+                return True, chat_result['content'], None
+                
+            except Exception as e:
+                error_str = str(e)
+                
+                # Check if it's an authentication error (token expired)
+                if ("401" in error_str or "Expired" in error_str or "AuthenticationError" in error_str) and retry_count < max_retries - 1:
+                    print(f"\n⚠️  Token expired, getting new token (attempt {retry_count + 1}/{max_retries})...")
+                    if callback:
+                        callback("Token expired, refreshing authentication...")
+                    
+                    # Reset LLM to force reinitialization with new token
+                    self.llm = None
+                    retry_count += 1
+                    continue
+                else:
+                    # Not an auth error or out of retries
+                    import traceback
+                    traceback.print_exc()
+                    return False, None, f"Chat failed: {str(e)}"
+        
+        return False, None, "Failed after retrying with fresh token"
+    
+    def chat_comparison(
+        self,
+        report1_content: str,
+        report2_content: str,
+        comparison_summary: str,
+        build1_name: str,
+        build2_name: str,
+        chat_history: List[Dict],
+        user_question: str,
+        callback=None
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        """
+        Chat with AI about a comparison of two test reports.
+        
+        Args:
+            report1_content: Content of the first test report
+            report2_content: Content of the second test report
+            comparison_summary: The AI-generated comparison summary
+            build1_name: Name of the first build
+            build2_name: Name of the second build
+            chat_history: List of previous chat messages
+            user_question: The user's current question
+            callback: Optional callback function for progress updates
+            
+        Returns:
+            Tuple of (success, ai_response, error_message)
+        """
+        if not SUMMARIZER_AVAILABLE:
+            return False, None, "Summarizer module not available"
+        
+        max_retries = 2
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                # Initialize if not already done
+                if self.llm is None or retry_count > 0:
+                    if callback:
+                        callback("Initializing AI model...")
+                    
+                    force_refresh = (retry_count > 0)
+                    success, error = self.initialize(force_refresh=force_refresh)
+                    if not success:
+                        return False, None, error
+                
+                # Get AI response
+                if callback:
+                    callback("Getting AI response...")
+                
+                chat_result = chat_with_comparison(
+                    self.llm,
+                    report1_content,
+                    report2_content,
+                    comparison_summary,
+                    build1_name,
+                    build2_name,
+                    chat_history,
+                    user_question
+                )
+                
+                return True, chat_result['content'], None
+                
+            except Exception as e:
+                error_str = str(e)
+                
+                # Check if it's an authentication error (token expired)
+                if ("401" in error_str or "Expired" in error_str or "AuthenticationError" in error_str) and retry_count < max_retries - 1:
+                    print(f"\n⚠️  Token expired, getting new token (attempt {retry_count + 1}/{max_retries})...")
+                    if callback:
+                        callback("Token expired, refreshing authentication...")
+                    
+                    # Reset LLM to force reinitialization with new token
+                    self.llm = None
+                    retry_count += 1
+                    continue
+                else:
+                    # Not an auth error or out of retries
+                    import traceback
+                    traceback.print_exc()
+                    return False, None, f"Comparison chat failed: {str(e)}"
         
         return False, None, "Failed after retrying with fresh token"
     

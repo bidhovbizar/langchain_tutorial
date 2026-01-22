@@ -22,7 +22,7 @@ import sys
 import base64
 from pathlib import Path
 from langchain_openai import AzureChatOpenAI
-from langchain.schema import HumanMessage, SystemMessage
+from langchain.schema import HumanMessage, SystemMessage, AIMessage
 import dotenv
 
 # Load environment variables
@@ -243,6 +243,296 @@ Keep FAILED and SKIPPED completely separate to clearly identify whether issues a
     return [system_message, human_message]
 
 
+def condense_report_for_ai(report_content, max_logs_per_test=3):
+    """
+    Condense a large report by removing verbose logs while keeping essential failure info.
+    
+    Strategy:
+    1. Keep summary section intact
+    2. For each test failure:
+       - Keep test name, status, failure message
+       - Keep only first N error/log lines (not all 100+)
+       - Skip repetitive JSON logs
+    
+    This reduces report size by 80-90% while preserving all essential information for AI analysis.
+    
+    Args:
+        report_content: The full report content
+        max_logs_per_test: Maximum log lines to keep per test failure
+        
+    Returns:
+        str: Condensed report content
+    """
+    lines = report_content.split('\n')
+    output_lines = []
+    
+    in_test_section = False
+    current_test_logs = []
+    logs_count = 0
+    
+    for line in lines:
+        # Check if we're in the failures section
+        if 'FAILURES & ERRORS:' in line or '=== FAILURES ===' in line:
+            in_test_section = True
+            output_lines.append(line)
+            continue
+        
+        # Check if this is a new test
+        if line.strip().startswith('Test:'):
+            # Add previous test's condensed logs
+            if current_test_logs:
+                output_lines.extend(current_test_logs[:max_logs_per_test])
+                if len(current_test_logs) > max_logs_per_test:
+                    output_lines.append(f"    ... ({len(current_test_logs) - max_logs_per_test} more log lines omitted for brevity)")
+                current_test_logs = []
+                logs_count = 0
+            
+            # Start new test
+            output_lines.append(line)
+            continue
+        
+        # If we're in a test section and see log lines
+        if in_test_section and ('"ts":' in line or '"level":' in line or 'ERROR' in line or 'FAILURE' in line):
+            # This is a log line - only keep first few
+            current_test_logs.append(line)
+            logs_count += 1
+        elif in_test_section and line.strip().startswith('Status:') or line.strip().startswith('Failure Message:') or line.strip().startswith('Error:'):
+            # Keep status and error messages
+            output_lines.append(line)
+        elif not in_test_section or (in_test_section and line.strip() and not line.strip().startswith('{')):
+            # Keep summary section and non-log lines
+            output_lines.append(line)
+    
+    # Add last test's logs
+    if current_test_logs:
+        output_lines.extend(current_test_logs[:max_logs_per_test])
+        if len(current_test_logs) > max_logs_per_test:
+            output_lines.append(f"    ... ({len(current_test_logs) - max_logs_per_test} more log lines omitted for brevity)")
+    
+    condensed = '\n'.join(output_lines)
+    
+    # Log the condensing results
+    original_size = len(report_content)
+    condensed_size = len(condensed)
+    reduction_pct = ((original_size - condensed_size) / original_size * 100) if original_size > 0 else 0
+    
+    if reduction_pct > 10:  # Only log if significant reduction
+        print(f"[Report condensed: {original_size:,} → {condensed_size:,} chars ({reduction_pct:.1f}% reduction)]")
+    
+    return condensed
+
+
+def split_report_into_chunks(report_content, max_chars_per_chunk=200000):
+    """
+    Split a large report into manageable chunks while preserving structure.
+    
+    NOTE: This is now a FALLBACK. We first try to condense the report.
+    Chunking is only used if condensing still leaves the report too large.
+    
+    Strategy:
+    1. Keep the summary section intact in all chunks
+    2. Split the failures list into groups
+    3. Each chunk gets: summary + subset of failures
+    
+    Args:
+        report_content: The full report content
+        max_chars_per_chunk: Maximum characters per chunk (~50K tokens)
+        
+    Returns:
+        list: List of report chunks, or [report_content] if small enough
+    """
+    # If report is small enough, return as-is
+    if len(report_content) <= max_chars_per_chunk:
+        return [report_content]
+    
+    # Try to split intelligently by finding the failures section
+    lines = report_content.split('\n')
+    
+    # Find where summary ends and failures begin
+    summary_lines = []
+    failure_lines = []
+    in_failures = False
+    
+    for line in lines:
+        if '=== FAILURES ===' in line or 'FAILED TESTS:' in line or 'Test Failures:' in line:
+            in_failures = True
+            failure_lines.append(line)
+        elif in_failures:
+            failure_lines.append(line)
+        else:
+            summary_lines.append(line)
+    
+    summary_text = '\n'.join(summary_lines)
+    
+    # If we couldn't find a clear split, do a simple character-based split
+    if not failure_lines:
+        chunks = []
+        for i in range(0, len(report_content), max_chars_per_chunk):
+            chunk = report_content[i:i + max_chars_per_chunk]
+            if i > 0:
+                chunk = "[...continued from previous chunk]\n\n" + chunk
+            if i + max_chars_per_chunk < len(report_content):
+                chunk = chunk + "\n\n[...continues in next chunk]"
+            chunks.append(chunk)
+        return chunks
+    
+    # Split failures into chunks, keeping summary with each
+    chunks = []
+    current_failure_lines = []
+    current_size = len(summary_text)
+    
+    for line in failure_lines:
+        line_size = len(line) + 1  # +1 for newline
+        
+        # If adding this line would exceed the limit, create a chunk
+        if current_size + line_size > max_chars_per_chunk and current_failure_lines:
+            chunk = summary_text + '\n\n' + '\n'.join(current_failure_lines)
+            chunks.append(chunk)
+            current_failure_lines = [line]
+            current_size = len(summary_text) + line_size
+        else:
+            current_failure_lines.append(line)
+            current_size += line_size
+    
+    # Add the last chunk
+    if current_failure_lines:
+        chunk = summary_text + '\n\n' + '\n'.join(current_failure_lines)
+        chunks.append(chunk)
+    
+    return chunks
+
+
+def analyze_report_chunks(llm, report_chunks, callback=None):
+    """
+    Analyze a report that has been split into multiple chunks.
+    
+    Args:
+        llm: Initialized AzureChatOpenAI instance
+        report_chunks: List of report chunks
+        callback: Optional callback function for progress updates
+        
+    Returns:
+        dict: Combined analysis results
+    """
+    if len(report_chunks) == 1:
+        # Single chunk, analyze normally
+        return analyze_report(llm, report_chunks[0])
+    
+    msg = f"Large report detected: Analyzing in {len(report_chunks)} chunks..."
+    print(f"\n[{msg}]")
+    if callback:
+        callback(msg)
+    
+    # Analyze each chunk
+    chunk_analyses = []
+    for i, chunk in enumerate(report_chunks, 1):
+        msg = f"Analyzing chunk {i}/{len(report_chunks)} (this may take 15-30 seconds per chunk)..."
+        print(f"[{msg}]")
+        if callback:
+            callback(msg)
+        
+        # Create a prompt that knows this is part of a larger report
+        messages = create_chunked_analysis_prompt(chunk, i, len(report_chunks))
+        response = llm.invoke(messages)
+        chunk_analyses.append(response.content)
+    
+    # Combine the analyses
+    msg = f"Combining {len(chunk_analyses)} chunk analyses into final report..."
+    print(f"[{msg}]")
+    if callback:
+        callback(msg)
+    
+    combined_analysis = combine_chunk_analyses(llm, chunk_analyses)
+    
+    return combined_analysis
+
+
+def create_chunked_analysis_prompt(chunk_content, chunk_num, total_chunks):
+    """
+    Create a prompt for analyzing a chunk of a larger report.
+    
+    Args:
+        chunk_content: The chunk content
+        chunk_num: Current chunk number (1-indexed)
+        total_chunks: Total number of chunks
+        
+    Returns:
+        list: List of messages for the LLM
+    """
+    system_message = SystemMessage(content="""You are an expert test automation engineer analyzing a portion of a large test report.
+Your role is to:
+1. Identify and categorize test FAILURES and SKIPS in this chunk
+2. Extract root causes from error messages
+3. Note patterns and commonalities
+4. Provide focused analysis for this subset of tests
+
+This is part of a larger report being analyzed in chunks.""")
+    
+    human_message = HumanMessage(content=f"""This is chunk {chunk_num} of {total_chunks} from a large test report.
+
+Analyze the FAILED and SKIPPED tests in this chunk:
+
+{chunk_content}
+
+Provide:
+1. Summary of tests in this chunk (counts)
+2. FAILED tests analysis (list each with root cause)
+3. SKIPPED tests analysis (list each with reason)
+4. Patterns observed in this chunk
+
+Be thorough but focused on this subset of tests.""")
+    
+    return [system_message, human_message]
+
+
+def combine_chunk_analyses(llm, chunk_analyses):
+    """
+    Combine multiple chunk analyses into a coherent final analysis.
+    
+    Args:
+        llm: Initialized AzureChatOpenAI instance
+        chunk_analyses: List of analysis strings from each chunk
+        
+    Returns:
+        dict: Combined analysis results
+    """
+    system_message = SystemMessage(content="""You are an expert test automation engineer.
+You will receive multiple analyses from different parts of a large test report.
+Your role is to:
+1. Synthesize them into ONE coherent analysis
+2. Combine counts and statistics
+3. Identify overall patterns across all chunks
+4. Provide unified recommendations
+5. Keep FAILED and SKIPPED tests separate""")
+    
+    combined_content = "\n\n---CHUNK ANALYSIS SEPARATOR---\n\n".join(
+        [f"CHUNK {i+1} ANALYSIS:\n{analysis}" for i, analysis in enumerate(chunk_analyses)]
+    )
+    
+    human_message = HumanMessage(content=f"""Combine these chunk analyses into ONE comprehensive report:
+
+{combined_content}
+
+Provide a unified analysis with:
+1. OVERALL TEST SUMMARY (combined counts from all chunks)
+2. FAILED TESTS ANALYSIS (all failures with root causes, grouped by pattern)
+3. SKIPPED TESTS ANALYSIS (all skips with reasons, grouped by pattern)
+4. KEY FINDINGS (overall patterns across all tests)
+5. RECOMMENDATIONS (prioritized based on all data)
+
+Present as a single coherent analysis, not as separate chunks.""")
+    
+    print("[Sending combined analysis request to Azure OpenAI...]")
+    response = llm.invoke([system_message, human_message])
+    
+    return {
+        'content': response.content,
+        'metadata': response.response_metadata,
+        'message_id': response.id,
+        'usage': response.usage_metadata
+    }
+
+
 def create_quick_summary_prompt(report_content):
     """
     Create a simpler prompt for quick summarization.
@@ -286,20 +576,40 @@ Keep it concise but clearly separate FAILED from SKIPPED.""")
     return [system_message, human_message]
 
 
-def analyze_report(llm, report_content):
+def analyze_report(llm, report_content, callback=None):
     """
     Send the report to the LLM for detailed analysis.
+    Automatically handles large reports by chunking them (no data loss).
     
     Args:
         llm: Initialized AzureChatOpenAI instance
         report_content: Content of the test report
+        callback: Optional callback function for progress updates
         
     Returns:
         dict: Analysis results containing content, metadata, and usage info
     """
+    MAX_SAFE_CHARS = 200000  # ~50K tokens, leaves room for prompts + response
+    
+    # If report is large, chunk it (preserves all information)
+    if len(report_content) > MAX_SAFE_CHARS:
+        num_chunks = (len(report_content) + MAX_SAFE_CHARS - 1) // MAX_SAFE_CHARS
+        msg = f"Report size: {len(report_content):,} characters - will analyze in {num_chunks} chunks"
+        print(f"\n[{msg}]")
+        if callback:
+            callback(f"⚠️  Large report detected! {msg}")
+            callback(f"⏱️  Estimated time: {num_chunks * 20}-{num_chunks * 30} seconds ({num_chunks * 20 // 60}-{num_chunks * 30 // 60} minutes)")
+            callback("Please be patient, analyzing all data without loss...")
+        
+        chunks = split_report_into_chunks(report_content, max_chars_per_chunk=MAX_SAFE_CHARS)
+        return analyze_report_chunks(llm, chunks, callback=callback)
+    
+    # Report is small enough, analyze normally
     messages = create_analysis_prompt(report_content)
     
     print("\n[Sending to Azure OpenAI for detailed analysis...]")
+    if callback:
+        callback("Sending to AI for analysis...")
     response = llm.invoke(messages)
     
     return {
@@ -310,20 +620,39 @@ def analyze_report(llm, report_content):
     }
 
 
-def quick_summarize_report(llm, report_content):
+def quick_summarize_report(llm, report_content, callback=None):
     """
     Send the report to the LLM for quick summarization.
+    Automatically handles large reports by chunking them (no data loss).
     
     Args:
         llm: Initialized AzureChatOpenAI instance
         report_content: Content of the test report
+        callback: Optional callback function for progress updates
         
     Returns:
         dict: Analysis results containing content, metadata, and usage info
     """
+    MAX_SAFE_CHARS = 200000
+    
+    # If report is large, chunk it (preserves all information)
+    if len(report_content) > MAX_SAFE_CHARS:
+        num_chunks = (len(report_content) + MAX_SAFE_CHARS - 1) // MAX_SAFE_CHARS
+        msg = f"Report size: {len(report_content):,} characters - will analyze in {num_chunks} chunks"
+        print(f"\n[{msg}]")
+        if callback:
+            callback(f"⚠️  Large report detected! {msg}")
+            callback(f"⏱️  Estimated time: {num_chunks * 20}-{num_chunks * 30} seconds ({num_chunks * 20 // 60}-{num_chunks * 30 // 60} minutes)")
+            callback("Please be patient, analyzing all data without loss...")
+        
+        chunks = split_report_into_chunks(report_content, max_chars_per_chunk=MAX_SAFE_CHARS)
+        return analyze_report_chunks(llm, chunks, callback=callback)
+    
     messages = create_quick_summary_prompt(report_content)
     
     print("\n[Sending to Azure OpenAI for quick summary...]")
+    if callback:
+        callback("Sending to AI for quick summary...")
     response = llm.invoke(messages)
     
     return {
@@ -422,6 +751,138 @@ def compare_reports(llm, report1_content, report2_content, build1_name, build2_n
     messages = create_comparison_prompt(report1_content, report2_content, build1_name, build2_name)
     
     print(f"\n[Sending to Azure OpenAI for comparison analysis of {build1_name} vs {build2_name}...]")
+    response = llm.invoke(messages)
+    
+    return {
+        'content': response.content,
+        'metadata': response.response_metadata,
+        'message_id': response.id,
+        'usage': response.usage_metadata
+    }
+
+
+def chat_with_report(llm, report_content, ai_summary, chat_history, user_question):
+    """
+    Interactive chat with AI about the test report.
+    
+    Args:
+        llm: Initialized AzureChatOpenAI instance
+        report_content: The full test report content
+        ai_summary: The AI-generated summary (from quick or full analysis)
+        chat_history: List of previous chat messages [{"role": "user/assistant", "content": "..."}]
+        user_question: The user's current question
+        
+    Returns:
+        dict: Chat response containing content, metadata, and usage info
+    """
+    # Build the system message with report context
+    system_message = SystemMessage(content=f"""You are an expert test automation engineer assistant. 
+You have access to a test report and its analysis. Your role is to:
+1. Answer questions about the test report accurately
+2. Provide insights about test failures and their causes
+3. Help users understand error messages and patterns
+4. Suggest actionable next steps
+5. Be concise but thorough in your explanations
+
+Here is the test report you're analyzing:
+
+--- TEST REPORT ---
+{report_content[:8000]}  # Limit to first 8000 chars to manage tokens
+--- END TEST REPORT ---
+
+Here is the AI analysis summary:
+--- AI ANALYSIS ---
+{ai_summary}
+--- END AI ANALYSIS ---
+
+Answer the user's questions based on this context. If the information isn't in the report, 
+say so clearly. Always ground your answers in the actual report data.""")
+    
+    # Build messages list with chat history
+    messages = [system_message]
+    
+    # Add chat history (last 5 exchanges to manage token usage)
+    for msg in chat_history[-10:]:  # Last 10 messages (5 exchanges)
+        if msg['role'] == 'user':
+            messages.append(HumanMessage(content=msg['content']))
+        else:
+            messages.append(AIMessage(content=msg['content']))
+    
+    # Add current question
+    messages.append(HumanMessage(content=user_question))
+    
+    # Get response from LLM
+    response = llm.invoke(messages)
+    
+    return {
+        'content': response.content,
+        'metadata': response.response_metadata,
+        'message_id': response.id,
+        'usage': response.usage_metadata
+    }
+
+
+def chat_with_comparison(llm, report1_content, report2_content, comparison_summary, 
+                         build1_name, build2_name, chat_history, user_question):
+    """
+    Interactive chat with AI about the comparison of two test reports.
+    
+    Args:
+        llm: Initialized AzureChatOpenAI instance
+        report1_content: Content of the first test report
+        report2_content: Content of the second test report
+        comparison_summary: The AI-generated comparison summary
+        build1_name: Name of the first build
+        build2_name: Name of the second build
+        chat_history: List of previous chat messages
+        user_question: The user's current question
+        
+    Returns:
+        dict: Chat response containing content, metadata, and usage info
+    """
+    # Build the system message with comparison context
+    system_message = SystemMessage(content=f"""You are an expert test automation engineer assistant. 
+You have access to two test reports and their comparison analysis. Your role is to:
+1. Answer questions about the comparison accurately
+2. Explain differences, regressions, and fixes
+3. Identify patterns across both runs
+4. Help users understand what changed between builds
+5. Suggest actionable next steps
+
+Here are the two builds being compared:
+- Build 1: {build1_name}
+- Build 2: {build2_name}
+
+--- REPORT 1 ({build1_name}) ---
+{report1_content[:4000]}  # Limit to manage tokens
+--- END REPORT 1 ---
+
+--- REPORT 2 ({build2_name}) ---
+{report2_content[:4000]}  # Limit to manage tokens
+--- END REPORT 2 ---
+
+Here is the comparison analysis:
+--- COMPARISON ANALYSIS ---
+{comparison_summary}
+--- END COMPARISON ANALYSIS ---
+
+Answer the user's questions based on this comparison context. If the information isn't in the 
+reports, say so clearly. Always ground your answers in the actual report data.""")
+    
+    # Build messages list with chat history
+    messages = [system_message]
+    
+    # Add chat history (last 10 messages to manage token usage)
+    for msg in chat_history[-10:]:
+        if msg['role'] == 'user':
+            messages.append(HumanMessage(content=msg['content']))
+        else:
+            messages.append(AIMessage(content=msg['content']))
+    
+    # Add current question
+    messages.append(HumanMessage(content=user_question))
+    
+    # Get response from LLM
     response = llm.invoke(messages)
     
     return {

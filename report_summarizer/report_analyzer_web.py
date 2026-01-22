@@ -229,6 +229,13 @@ def init_session_state():
     
     if 'show_comparison' not in st.session_state:
         st.session_state.show_comparison = False
+    
+    # Chat-related session state
+    if 'chat_history' not in st.session_state:
+        st.session_state.chat_history = []
+    
+    if 'chat_key_counter' not in st.session_state:
+        st.session_state.chat_key_counter = 0
 
 
 def display_header():
@@ -476,7 +483,7 @@ def display_results(results: dict):
     # Display summary/analysis
     st.markdown("---")
     
-    summary_result = results['summary']
+    summary_result = results.get('summary')
     
     if results['mode'] == 'quick':
         st.markdown("#### ⚡ Quick AI Summary")
@@ -484,10 +491,17 @@ def display_results(results: dict):
         st.markdown("#### 🔍 Detailed AI Analysis")
     
     # Display the AI-generated content
-    st.markdown(summary_result['content'])
+    if summary_result and isinstance(summary_result, dict) and 'content' in summary_result:
+        st.markdown(summary_result['content'])
+    elif summary_result and isinstance(summary_result, str):
+        # Handle case where summary is stored as a string
+        st.markdown(summary_result)
+    else:
+        st.warning("⚠️ AI analysis not available for this entry. This may be an older analysis from history.")
+        st.info("💡 Tip: Re-run the analysis to generate a new AI summary with chat support.")
     
     # Show token usage in expander (for both modes)
-    if 'usage' in summary_result and summary_result['usage']:
+    if summary_result and isinstance(summary_result, dict) and 'usage' in summary_result and summary_result['usage']:
         with st.expander("📈 Token Usage Statistics"):
             usage = summary_result['usage']
             col1, col2, col3 = st.columns(3)
@@ -520,7 +534,12 @@ def display_results(results: dict):
     
     with col2:
         # Download analysis (both modes use same structure now)
-        analysis_content = results['summary']['content']
+        if summary_result and isinstance(summary_result, dict) and 'content' in summary_result:
+            analysis_content = summary_result['content']
+        elif summary_result and isinstance(summary_result, str):
+            analysis_content = summary_result
+        else:
+            analysis_content = "AI analysis not available for this entry."
         
         mode_label = "quick_summary" if results['mode'] == 'quick' else "full_analysis"
         
@@ -531,6 +550,9 @@ def display_results(results: dict):
             mime="text/plain",
             use_container_width=True
         )
+    
+    # Interactive Chat Interface
+    display_chat_interface(results, is_comparison=False)
     
     # Add "Back to Main Input" button
     st.markdown("---")
@@ -741,6 +763,14 @@ def display_comparison():
                 del st.session_state[comparison_key]
                 st.rerun()
     
+    # Interactive Chat Interface for Comparison
+    comparison_results = {
+        'comparison_data': comparison_data,
+        'ai_analysis': ai_comparison.get('content', ''),
+        'url': 'comparison'
+    }
+    display_chat_interface(comparison_results, is_comparison=True)
+    
     st.markdown("---")
     
     # Navigation buttons
@@ -762,6 +792,166 @@ def display_comparison():
             st.rerun()
 
 
+def display_chat_interface(results, is_comparison=False):
+    """
+    Display interactive chat interface for asking questions about the report.
+    
+    Args:
+        results: Analysis results dictionary
+        is_comparison: Whether this is a comparison view or single analysis
+    """
+    st.markdown("---")
+    st.markdown("### 💬 Chat with AI About This Report")
+    st.markdown("Ask questions to get deeper insights into the test results.")
+    
+    # Use entry_id to create a unique chat session per analysis
+    # This ensures each analysis has its own isolated chat history
+    if is_comparison:
+        # For comparisons, create a unique key from both entry IDs
+        comparison_data = results.get('comparison_data', {})
+        entries = comparison_data.get('entries', [])
+        if len(entries) >= 2:
+            chat_key = f"chat_comparison_{entries[0].get('id', 'a')}_{entries[1].get('id', 'b')}"
+        else:
+            chat_key = "chat_comparison_unknown"
+    else:
+        # For single analysis, use the unique entry_id
+        entry_id = results.get('entry_id', results.get('url', 'unknown'))
+        chat_key = f"chat_analysis_{entry_id}"
+    
+    # Initialize chat history for this specific analysis if not exists
+    if chat_key not in st.session_state:
+        st.session_state[chat_key] = []
+    
+    chat_history = st.session_state[chat_key]
+    
+    # Show chat session info and clear button
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        if is_comparison:
+            st.caption("💬 Chat session for this comparison")
+        else:
+            st.caption(f"💬 Chat session for this analysis (Session ID: {entry_id[:8]}...)")
+    with col2:
+        if st.button("🗑️ Clear Chat", key=f"clear_{chat_key}", use_container_width=True):
+            st.session_state[chat_key] = []
+            st.rerun()
+    
+    # Display chat messages
+    chat_container = st.container()
+    with chat_container:
+        # Show welcome message if no chat history
+        if len(chat_history) == 0:
+            with st.chat_message("assistant"):
+                st.markdown("👋 Hi! I'm here to help you understand this test report. You can ask me questions like:")
+                st.markdown("- Why did test X fail?")
+                st.markdown("- What should I fix first?")
+                st.markdown("- Are these failures related?")
+                st.markdown("- What's the root cause of these errors?")
+        
+        # Display chat history
+        for message in chat_history:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+    
+    # Chat input
+    user_input = st.chat_input("Ask a question about this report...")
+    
+    if user_input:
+        # Add user message to chat history
+        chat_history.append({"role": "user", "content": user_input})
+        
+        # Display user message
+        with chat_container:
+            with st.chat_message("user"):
+                st.markdown(user_input)
+        
+        # Get AI response
+        with chat_container:
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    try:
+                        # Initialize summarizer
+                        summarizer = SummarizerWrapper()
+                        
+                        if is_comparison:
+                            # Comparison chat
+                            comparison_data = results.get('comparison_data', {})
+                            entries = comparison_data.get('entries', [])
+                            
+                            if len(entries) >= 2:
+                                # Get report contents
+                                report1_path = entries[0].get('error_report_path')
+                                report2_path = entries[1].get('error_report_path')
+                                build1_name = entries[0].get('build_name', 'Build 1')
+                                build2_name = entries[1].get('build_name', 'Build 2')
+                                
+                                # Read report files
+                                with open(report1_path, 'r') as f:
+                                    report1_content = f.read()
+                                with open(report2_path, 'r') as f:
+                                    report2_content = f.read()
+                                
+                                comparison_summary = results.get('ai_analysis', '')
+                                
+                                success, ai_response, error = summarizer.chat_comparison(
+                                    report1_content,
+                                    report2_content,
+                                    comparison_summary,
+                                    build1_name,
+                                    build2_name,
+                                    chat_history[:-1],  # Exclude the just-added user message
+                                    user_input
+                                )
+                            else:
+                                success = False
+                                error = "Not enough comparison data"
+                        else:
+                            # Single report chat
+                            error_report_path = results.get('report_path')  # Fixed: was 'error_report_path', should be 'report_path'
+                            ai_summary = results.get('summary', {}).get('content', '')  # Fixed: get content from summary dict
+                            
+                            if not error_report_path:
+                                st.error("❌ Error: Report path not found. Please re-run the analysis.")
+                                chat_history.append({"role": "assistant", "content": "❌ Error: Report path not found. Please re-run the analysis."})
+                                st.session_state[chat_key] = chat_history
+                                st.rerun()
+                                return
+                            
+                            # Read report file
+                            with open(error_report_path, 'r') as f:
+                                report_content = f.read()
+                            
+                            success, ai_response, error = summarizer.chat(
+                                report_content,
+                                ai_summary,
+                                chat_history[:-1],  # Exclude the just-added user message
+                                user_input
+                            )
+                        
+                        if success:
+                            st.markdown(ai_response)
+                            # Add AI response to chat history
+                            chat_history.append({"role": "assistant", "content": ai_response})
+                        else:
+                            error_msg = f"❌ Error: {error}"
+                            st.error(error_msg)
+                            # Add error to chat history
+                            chat_history.append({"role": "assistant", "content": error_msg})
+                    
+                    except Exception as e:
+                        import traceback
+                        error_msg = f"❌ Error getting AI response: {str(e)}"
+                        st.error(error_msg)
+                        traceback.print_exc()
+                        # Add error to chat history
+                        chat_history.append({"role": "assistant", "content": error_msg})
+        
+        # Update session state
+        st.session_state[chat_key] = chat_history
+        st.rerun()
+
+
 def main():
     """Main application flow"""
     init_session_state()
@@ -778,6 +968,12 @@ def main():
             st.session_state.session_manager.clear_history()
             st.session_state.analysis_complete = False
             st.session_state.current_results = None
+            
+            # Clean up all chat sessions associated with cleared history
+            chat_keys_to_remove = [key for key in st.session_state.keys() if key.startswith('chat_')]
+            for key in chat_keys_to_remove:
+                del st.session_state[key]
+            
             st.rerun()
     
     # Main content
