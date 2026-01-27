@@ -33,180 +33,778 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for compact, information-dense styling
+# Custom CSS for Apple-inspired white theme
 st.markdown("""
 <style>
-    /* Reduce overall app padding but keep top padding for header visibility */
-    .block-container {
-        padding-top: 2rem !important;
-        padding-bottom: 0rem !important;
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
+    /* Import Inter font (Apple-style) */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    /* ============================================ */
+    /* FORCE LIGHT MODE / WHITE THEME */
+    /* ============================================ */
+    
+    /* Override color scheme to light */
+    :root {
+        color-scheme: light !important;
+        --background-color: #ffffff !important;
+        --text-color: #1d1d1f !important;
     }
     
-    /* Compact headers - ensure main header is fully visible */
+    html, body {
+        background-color: #ffffff !important;
+        color: #1d1d1f !important;
+    }
+    
+    /* Force Streamlit theme to light */
+    [data-theme="dark"] {
+        color-scheme: light !important;
+    }
+    
+    /* Force all major containers to white */
+    section[tabindex="0"],
+    .main,
+    [data-testid="stAppViewContainer"],
+    [data-testid="stApp"],
+    [data-testid="block-container"] {
+        background-color: #ffffff !important;
+        color: #1d1d1f !important;
+    }
+    
+    /* ============================================ */
+    /* GLOBAL THEME - Apple-inspired Clean White */
+    /* ============================================ */
+    
+    /* Main app background - subtle gradient */
+    .stApp {
+        background: linear-gradient(180deg, #fafafa 0%, #ffffff 100%) !important;
+        color: #1d1d1f !important;
+    }
+    
+    /* Override Streamlit dark theme */
+    [data-testid="stAppViewContainer"] {
+        background: linear-gradient(180deg, #fafafa 0%, #ffffff 100%) !important;
+        color: #1d1d1f !important;
+    }
+    
+    /* Force text elements to be dark (but not buttons) */
+    [data-testid="stAppViewContainer"] p,
+    [data-testid="stAppViewContainer"] span,
+    [data-testid="stAppViewContainer"] div:not(.stButton):not(.stDownloadButton),
+    [data-testid="stAppViewContainer"] label {
+        color: #1d1d1f !important;
+    }
+    
+    /* Main content area - COMPACT spacing */
+    .main .block-container {
+        background-color: #ffffff;
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+        padding-left: 2.5rem !important;
+        padding-right: 2.5rem !important;
+        max-width: 1400px;
+        border-radius: 16px;
+        box-shadow: 0 0 40px rgba(0,0,0,0.03);
+    }
+    
+    /* Typography - Apple-style */
+    * {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Roboto', sans-serif !important;
+    }
+    
+    /* FORCE ALL TEXT TO BE DARK/BLACK */
+    body, p, span, div, label, li, a {
+        color: #1d1d1f !important;
+    }
+    
+    .stMarkdown, .stMarkdown p, .stMarkdown span {
+        color: #1d1d1f !important;
+    }
+    
+    .stText {
+        color: #1d1d1f !important;
+    }
+    
+    /* Force main container text to be dark */
+    .main {
+        color: #1d1d1f !important;
+    }
+    
+    /* Force Streamlit-specific text elements to be dark */
+    [data-testid="stText"],
+    [data-testid="stMarkdownContainer"],
+    [data-testid="stCaption"],
+    .stCaption {
+        color: #1d1d1f !important;
+    }
+    
+    /* Labels and help text */
+    label {
+        color: #1d1d1f !important;
+    }
+    
+    /* Captions */
+    .caption, small {
+        color: #86868b !important;
+    }
+    
+    /* ============================================ */
+    /* HEADER STYLING - Minimal & Clean & COMPACT */
+    /* ============================================ */
+    
     .main-header {
-        font-size: 1.8rem;
-        font-weight: bold;
-        color: #1f77b4;
+        font-size: 2rem;
+        font-weight: 600;
+        color: #1d1d1f !important;
         text-align: center;
         padding: 0.5rem 0;
-        margin-top: 0.5rem;
         margin-bottom: 0.5rem;
+        letter-spacing: -0.5px;
+    }
+    
+    h1, h2, h3, h4 {
+        color: #1d1d1f !important;
+        font-weight: 600 !important;
+        letter-spacing: -0.3px;
     }
     
     h1 {
-        font-size: 1.6rem !important;
+        font-size: 1.8rem !important;
         margin-top: 0.5rem !important;
         margin-bottom: 0.5rem !important;
-        padding-top: 0.3rem !important;
+        color: #1d1d1f !important;
     }
     
     h2 {
-        font-size: 1.3rem !important;
-        margin-top: 0.5rem !important;
-        margin-bottom: 0.3rem !important;
+        font-size: 1.5rem !important;
+        margin-top: 0.75rem !important;
+        margin-bottom: 0.5rem !important;
+        color: #1d1d1f !important;
     }
     
     h3 {
-        font-size: 1.1rem !important;
-        margin-top: 0.3rem !important;
-        margin-bottom: 0.2rem !important;
+        font-size: 1.3rem !important;
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.4rem !important;
+        color: #1d1d1f !important;
     }
     
-    /* Compact metrics */
+    h4 {
+        font-size: 1.1rem !important;
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.3rem !important;
+        color: #1d1d1f !important;
+    }
+    
+    /* Sidebar title */
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] .stTitle {
+        color: #1d1d1f !important;
+    }
+    
+    /* ============================================ */
+    /* BUTTONS - Smaller, Prettier, Gradient Purple/Pink */
+    /* ============================================ */
+    
+    /* Force ALL buttons to have base styling (catch-all) */
+    button[data-testid="baseButton-primary"],
+    button[kind="primary"],
+    .stButton > button[data-testid*="primary"],
+    button:has-text("Analyze"),
+    button:has-text("Compare"),
+    button:has-text("View") {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 0.5rem 1.2rem !important;
+        font-size: 0.9rem !important;
+        font-weight: 500 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3) !important;
+        height: 38px !important;
+        min-height: 38px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        line-height: 1 !important;
+        vertical-align: middle !important;
+    }
+    
+    /* Primary action buttons (Analyze, Compare, View) - Gradient */
+    .stButton > button[kind="primary"],
+    .stButton > button[data-testid="baseButton-primary"] {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 0.5rem 1.2rem !important;
+        font-size: 0.9rem !important;
+        font-weight: 500 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3) !important;
+        height: 38px !important;
+        min-height: 38px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        line-height: 1 !important;
+        vertical-align: middle !important;
+    }
+    
+    .stButton > button[kind="primary"]:hover,
+    .stButton > button[data-testid="baseButton-primary"]:hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4) !important;
+    }
+    
+    /* Secondary buttons (Clear, Download, Back, etc.) - Sky Blue to Ocean Blue */
+    .stButton > button[kind="secondary"],
+    .stButton > button[data-testid="baseButton-secondary"],
+    button[data-testid="baseButton-secondary"],
+    button[kind="secondary"] {
+        background: linear-gradient(135deg, #56CCF2 0%, #2F80ED 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 0.5rem 1.2rem !important;
+        font-size: 0.9rem !important;
+        font-weight: 500 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 2px 8px rgba(47, 128, 237, 0.3) !important;
+        height: 38px !important;
+        min-height: 38px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        line-height: 1 !important;
+        vertical-align: middle !important;
+    }
+    
+    .stButton > button[kind="secondary"]:hover,
+    .stButton > button[data-testid="baseButton-secondary"]:hover,
+    button[data-testid="baseButton-secondary"]:hover,
+    button[kind="secondary"]:hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px rgba(47, 128, 237, 0.4) !important;
+    }
+    
+    /* Download buttons - Sky Blue to Ocean Blue */
+    .stDownloadButton > button,
+    button[data-testid*="download"],
+    button[data-testid="stDownloadButton"] {
+        background: linear-gradient(135deg, #56CCF2 0%, #2F80ED 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 0.5rem 1.2rem !important;
+        font-size: 0.9rem !important;
+        font-weight: 500 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 2px 8px rgba(47, 128, 237, 0.3) !important;
+        height: 38px !important;
+        min-height: 38px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        line-height: 1 !important;
+        vertical-align: middle !important;
+    }
+    
+    .stDownloadButton > button:hover,
+    button[data-testid*="download"]:hover,
+    button[data-testid="stDownloadButton"]:hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px rgba(47, 128, 237, 0.4) !important;
+    }
+    
+    /* Fallback: Any remaining plain buttons get secondary gradient style */
+    .stButton > button:not([kind]),
+    button:not([kind]):not([data-testid*="download"]) {
+        background: linear-gradient(135deg, #56CCF2 0%, #2F80ED 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 0.5rem 1.2rem !important;
+        font-size: 0.9rem !important;
+        font-weight: 500 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 2px 8px rgba(47, 128, 237, 0.3) !important;
+        height: 38px !important;
+        min-height: 38px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        line-height: 1 !important;
+        vertical-align: middle !important;
+    }
+    
+    /* ABSOLUTE CATCH-ALL: Force ALL button elements to have styling */
+    /* EXCEPT Streamlit's header buttons (hamburger menu, etc.) */
+    button:not([data-testid="stMainMenuButton"]):not([data-testid="stHeader"] button) {
+        border-radius: 8px !important;
+        padding: 0.5rem 1.2rem !important;
+        font-size: 0.9rem !important;
+        font-weight: 500 !important;
+        transition: all 0.3s ease !important;
+        height: 38px !important;
+        min-height: 38px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        line-height: 1 !important;
+        vertical-align: middle !important;
+    }
+    
+    /* If a button is still plain/default, force sky blue gradient */
+    /* EXCEPT Streamlit's header buttons */
+    button:not([style*="background"]):not(.stButton [kind="primary"]):not([data-testid="stMainMenuButton"]):not([data-testid="stHeader"] button) {
+        background: linear-gradient(135deg, #56CCF2 0%, #2F80ED 100%) !important;
+        color: white !important;
+        border: none !important;
+        box-shadow: 0 2px 8px rgba(47, 128, 237, 0.3) !important;
+    }
+    
+    /* Force Streamlit header buttons to stay black/dark */
+    [data-testid="stHeader"] button,
+    button[data-testid="stMainMenuButton"],
+    [data-testid="stToolbar"] button,
+    header button {
+        background: transparent !important;
+        color: #1d1d1f !important;
+        border: none !important;
+        box-shadow: none !important;
+        height: auto !important;
+        padding: 0.25rem !important;
+    }
+    
+    [data-testid="stHeader"] button:hover,
+    button[data-testid="stMainMenuButton"]:hover,
+    [data-testid="stToolbar"] button:hover,
+    header button:hover {
+        background: rgba(0, 0, 0, 0.05) !important;
+        color: #1d1d1f !important;
+    }
+    
+    /* Hover effects for fallback buttons */
+    .stButton > button:not([kind]):hover,
+    button:not([kind]):not([data-testid*="download"]):hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px rgba(47, 128, 237, 0.4) !important;
+    }
+    
+    /* Ensure button text/content is perfectly vertically centered */
+    button p, button span, button div,
+    .stButton p, .stButton span, .stButton div,
+    .stDownloadButton p, .stDownloadButton span, .stDownloadButton div {
+        line-height: 1 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        vertical-align: middle !important;
+    }
+    
+    /* Ensure button containers are vertically centered in columns */
+    .stButton, .stDownloadButton {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    
+    /* Ensure columns with buttons are vertically aligned */
+    [data-testid="column"] > div {
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+    }
+    
+    /* ============================================ */
+    /* INPUT FIELDS - Clean & Light */
+    /* ============================================ */
+    
+    .stTextInput > div > div > input {
+        background-color: #f5f5f7 !important;
+        border: 1px solid #d2d2d7 !important;
+        border-radius: 8px !important;
+        padding: 0.5rem 1rem !important;
+        color: #1d1d1f !important;
+        font-size: 0.95rem !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .stTextInput > div > div > input:focus {
+        border-color: #667eea !important;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+        background-color: white !important;
+    }
+    
+    /* Select boxes - WHITE THEME */
+    .stSelectbox > div > div {
+        background-color: #f5f5f7 !important;
+        border: 1px solid #d2d2d7 !important;
+        border-radius: 8px !important;
+    }
+    
+    .stSelectbox > div > div:focus-within {
+        border-color: #667eea !important;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+    }
+    
+    /* Dropdown menu - Force white background */
+    [data-baseweb="popover"] {
+        background-color: white !important;
+    }
+    
+    [data-baseweb="menu"] {
+        background-color: white !important;
+    }
+    
+    [role="option"] {
+        background-color: white !important;
+        color: #1d1d1f !important;
+    }
+    
+    [role="option"]:hover {
+        background-color: #f5f3ff !important;
+    }
+    
+    /* ============================================ */
+    /* METRICS CARDS - Elegant with gradient */
+    /* ============================================ */
+    
     [data-testid="stMetricValue"] {
-        font-size: 1.2rem !important;
+        font-size: 1.8rem !important;
+        font-weight: 600 !important;
+        color: #1d1d1f !important;
     }
     
     [data-testid="stMetricLabel"] {
-        font-size: 0.8rem !important;
+        font-size: 0.85rem !important;
+        color: #86868b !important;
+        font-weight: 500 !important;
     }
     
-    [data-testid="stMetricDelta"] {
-        font-size: 0.7rem !important;
+    [data-testid="metric-container"] {
+        background: linear-gradient(135deg, #ffffff 0%, #f5f5f7 100%) !important;
+        padding: 1rem !important;
+        border-radius: 12px !important;
+        border: 1px solid #e5e5ea !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06) !important;
+        transition: all 0.3s ease !important;
     }
     
-    /* Reduce spacing between elements */
-    .element-container {
-        margin-bottom: 0.3rem !important;
+    [data-testid="metric-container"]:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.08) !important;
     }
     
-    /* Compact dividers */
-    hr {
-        margin-top: 0.5rem !important;
+    /* ============================================ */
+    /* EXPANDERS & CONTAINERS - Sleek cards */
+    /* ============================================ */
+    
+    .streamlit-expanderHeader {
+        background: linear-gradient(135deg, #ffffff 0%, #f5f5f7 100%) !important;
+        border: 1px solid #e5e5ea !important;
+        border-radius: 10px !important;
+        padding: 0.75rem 1rem !important;
+        color: #1d1d1f !important;
+        font-weight: 500 !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .streamlit-expanderHeader:hover {
+        background: linear-gradient(135deg, #f5f5f7 0%, #e5e5ea 100%) !important;
+        border-color: #667eea !important;
+    }
+    
+    .streamlit-expanderContent {
+        border: 1px solid #e5e5ea !important;
+        border-top: none !important;
+        border-radius: 0 0 10px 10px !important;
+        padding: 1rem !important;
+        background-color: white !important;
+    }
+    
+    /* ============================================ */
+    /* CHAT INTERFACE - Clean WHITE theme */
+    /* ============================================ */
+    
+    /* Chat container - FORCE WHITE */
+    .stChatFloatingInputContainer,
+    [data-testid="stChatFloatingInputContainer"],
+    [data-testid="stBottomBlockContainer"] {
+        background-color: white !important;
+        border-top: 1px solid #e5e5ea !important;
+        padding: 1rem !important;
+    }
+    
+    /* Chat input wrapper - FORCE WHITE */
+    .stChatInput,
+    [data-testid="stChatInput"],
+    .stChatInput > div,
+    .stChatInput > div > div {
+        background-color: white !important;
+    }
+    
+    /* Chat input field - FORCE WHITE background with DARK text */
+    .stChatInput input,
+    .stChatInput > div > div > input,
+    [data-testid="stChatInput"] input,
+    input[placeholder*="Ask"],
+    textarea[placeholder*="Ask"] {
+        background-color: #f5f5f7 !important;
+        border: 1px solid #d2d2d7 !important;
+        border-radius: 20px !important;
+        padding: 0.5rem 1rem !important;
+        color: #1d1d1f !important;
+        caret-color: #1d1d1f !important;
+        -webkit-text-fill-color: #1d1d1f !important;
+    }
+    
+    .stChatInput input:focus,
+    .stChatInput > div > div > input:focus,
+    textarea[placeholder*="Ask"]:focus {
+        border-color: #667eea !important;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+        background-color: white !important;
+        color: #1d1d1f !important;
+    }
+    
+    /* Placeholder text */
+    .stChatInput input::placeholder,
+    textarea[placeholder*="Ask"]::placeholder {
+        color: #86868b !important;
+        opacity: 1 !important;
+    }
+    
+    /* Chat messages */
+    .stChatMessage {
+        background-color: transparent !important;
+        border-radius: 12px !important;
+        padding: 0.75rem 1rem !important;
         margin-bottom: 0.5rem !important;
     }
     
-    /* Compact message boxes */
-    .success-box {
-        padding: 0.5rem;
-        border-radius: 0.3rem;
-        background-color: #d4edda;
-        border-left: 3px solid #28a745;
-        margin: 0.3rem 0;
-        font-size: 0.9rem;
-    }
-    .error-box {
-        padding: 0.5rem;
-        border-radius: 0.3rem;
-        background-color: #f8d7da;
-        border-left: 3px solid #dc3545;
-        margin: 0.3rem 0;
-        font-size: 0.9rem;
-    }
-    .info-box {
-        padding: 0.5rem;
-        border-radius: 0.3rem;
-        background-color: #d1ecf1;
-        border-left: 3px solid #17a2b8;
-        margin: 0.3rem 0;
-        font-size: 0.9rem;
+    /* Force ALL chat message text to be DARK/BLACK */
+    .stChatMessage,
+    .stChatMessage *,
+    [data-testid="stChatMessage"],
+    [data-testid="stChatMessage"] *,
+    [data-testid="stChatMessageContent"],
+    [data-testid="stChatMessageContent"] *,
+    .stMarkdown p,
+    .stChatMessage p,
+    .stChatMessage span,
+    .stChatMessage div {
+        color: #1d1d1f !important;
     }
     
-    /* Compact history cards */
-    .history-card {
-        padding: 0.5rem;
-        border-radius: 0.3rem;
-        background-color: #f8f9fa;
-        border: 1px solid #dee2e6;
-        margin: 0.3rem 0;
-        font-size: 0.85rem;
+    /* User messages - light gray background with dark text */
+    [data-testid="stChatMessageContent"] {
+        background-color: #f5f5f7 !important;
+        color: #1d1d1f !important;
+        border-radius: 12px !important;
+        padding: 0.75rem !important;
     }
     
-    /* Compact buttons */
-    .stButton button {
-        padding: 0.25rem 0.75rem !important;
-        font-size: 0.9rem !important;
-        height: 2rem !important;
+    /* Ensure all nested elements in chat have dark text */
+    .stChatMessage * {
+        color: #1d1d1f !important;
     }
     
-    /* Compact download buttons */
-    .stDownloadButton button {
-        padding: 0.25rem 0.75rem !important;
+    /* Chat message paragraphs specifically */
+    .stChatMessage p,
+    [data-testid="stChatMessage"] p {
+        color: #1d1d1f !important;
+    }
+    
+    /* ============================================ */
+    /* TABLES - Sharp, clean design */
+    /* ============================================ */
+    
+    .dataframe {
+        border: 1px solid #e5e5ea !important;
+        border-radius: 10px !important;
+        overflow: hidden !important;
+    }
+    
+    .dataframe thead tr {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    }
+    
+    .dataframe thead th {
+        color: white !important;
+        font-weight: 600 !important;
+        padding: 0.75rem !important;
+        border: none !important;
+    }
+    
+    .dataframe tbody tr {
+        border-bottom: 1px solid #f5f5f7 !important;
+        transition: background-color 0.2s ease !important;
+    }
+    
+    .dataframe tbody tr:hover {
+        background-color: #f5f3ff !important;
+    }
+    
+    .dataframe tbody td {
+        padding: 0.75rem !important;
+        color: #1d1d1f !important;
+    }
+    
+    /* ============================================ */
+    /* DIVIDERS - Elegant gradient lines */
+    /* ============================================ */
+    
+    hr {
+        border: none !important;
+        height: 2px !important;
+        background: linear-gradient(to right, transparent, #d2d2d7, transparent) !important;
+        margin: 1rem 0 !important;
+    }
+    
+    /* ============================================ */
+    /* SIDEBAR - Premium design */
+    /* ============================================ */
+    
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #f5f5f7 0%, #ffffff 100%) !important;
+        border-right: 1px solid #e5e5ea !important;
+        box-shadow: 2px 0 10px rgba(0,0,0,0.02) !important;
+    }
+    
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3 {
+        color: #1d1d1f !important;
+    }
+    
+    /* Sidebar buttons - compact */
+    [data-testid="stSidebar"] .stButton > button {
+        width: 100% !important;
+        margin-bottom: 0.5rem !important;
         font-size: 0.85rem !important;
+        padding: 0.4rem 0.8rem !important;
+        height: 36px !important;
     }
     
-    /* Compact expanders */
-    .streamlit-expanderHeader {
-        font-size: 0.95rem !important;
-        padding: 0.3rem !important;
+    /* ============================================ */
+    /* CODE BLOCKS - Clean WHITE design */
+    /* ============================================ */
+    
+    /* Force ALL code blocks to be light/white */
+    .stCodeBlock,
+    [data-testid="stCodeBlock"],
+    pre,
+    pre code,
+    code {
+        background-color: #f5f5f7 !important;
+        color: #1d1d1f !important;
+        border: 1px solid #e5e5ea !important;
+        border-radius: 8px !important;
+        padding: 0.75rem !important;
     }
     
-    /* Compact sidebar */
-    section[data-testid="stSidebar"] {
-        width: 280px !important;
+    /* Inline code */
+    code {
+        background-color: #f5f5f7 !important;
+        color: #667eea !important;
+        padding: 0.2rem 0.4rem !important;
+        border-radius: 4px !important;
+        font-size: 0.9rem !important;
+        border: none !important;
     }
     
-    section[data-testid="stSidebar"] .block-container {
-        padding: 1rem 0.5rem !important;
+    /* Code block container */
+    .stCodeBlock > div {
+        background-color: #f5f5f7 !important;
+    }
+    
+    /* Pre element (for st.code) */
+    pre {
+        background-color: #f5f5f7 !important;
+        color: #1d1d1f !important;
+        border: 1px solid #e5e5ea !important;
+    }
+    
+    /* ============================================ */
+    /* ALERTS - Refined styling */
+    /* ============================================ */
+    
+    .stAlert {
+        border-radius: 10px !important;
+        border-left-width: 4px !important;
+        padding: 0.75rem 1rem !important;
+    }
+    
+    /* Success alerts */
+    [data-baseweb="notification"][kind="success"] {
+        background-color: #d4fc79 !important;
+        border-left-color: #10b981 !important;
+    }
+    
+    /* Error alerts */
+    [data-baseweb="notification"][kind="error"] {
+        background-color: #fee2e2 !important;
+        border-left-color: #ef4444 !important;
+    }
+    
+    /* Info alerts */
+    [data-baseweb="notification"][kind="info"] {
+        background-color: #dbeafe !important;
+        border-left-color: #3b82f6 !important;
+    }
+    
+    /* ============================================ */
+    /* SCROLLBAR - Minimal design */
+    /* ============================================ */
+    
+    ::-webkit-scrollbar {
+        width: 8px !important;
+        height: 8px !important;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: #f5f5f7 !important;
+        border-radius: 10px !important;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: #d2d2d7 !important;
+        border-radius: 10px !important;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: #86868b !important;
+    }
+    
+    /* ============================================ */
+    /* SPACING ADJUSTMENTS - COMPACT */
+    /* ============================================ */
+    
+    /* Reduce spacing between elements */
+    .element-container {
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* Compact stMarkdown spacing */
+    .stMarkdown {
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* Compact expander spacing */
+    details {
+        margin-bottom: 0.75rem !important;
     }
     
     /* Tighter line height for paragraphs */
     p {
-        line-height: 1.4 !important;
-        margin-bottom: 0.3rem !important;
-    }
-    
-    /* Compact markdown */
-    .stMarkdown {
-        margin-bottom: 0.3rem !important;
-    }
-    
-    /* Reduce spacing in columns */
-    [data-testid="column"] {
-        padding: 0 0.5rem !important;
-    }
-    
-    /* Compact status messages */
-    .stAlert {
-        padding: 0.5rem !important;
-        margin: 0.3rem 0 !important;
-    }
-    
-    /* Compact tables */
-    table {
-        font-size: 0.85rem !important;
-    }
-    
-    th {
-        padding: 0.3rem 0.5rem !important;
-    }
-    
-    td {
-        padding: 0.3rem 0.5rem !important;
-    }
-    
-    /* Reduce spacing in text areas */
-    .stTextArea textarea {
-        font-size: 0.85rem !important;
-    }
-    
-    /* Compact code blocks */
-    pre {
-        padding: 0.5rem !important;
-        margin: 0.3rem 0 !important;
-        font-size: 0.8rem !important;
+        line-height: 1.5 !important;
+        margin-bottom: 0.5rem !important;
+        color: #1d1d1f !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -239,8 +837,19 @@ def init_session_state():
 
 
 def display_header():
-    """Display application header"""
-    st.markdown('<p class="main-header">🔍 Test Report Analyzer & Summarizer</p>', unsafe_allow_html=True)
+    """Display application header - Compact and professional"""
+    st.markdown("""
+    <div style="text-align: center; margin: 0.5rem 0 0.75rem 0;">
+        <hr style="border: none; height: 2px; background: linear-gradient(to right, transparent, #d2d2d7, transparent); margin-bottom: 0.5rem;">
+        <h1 style="font-size: 2rem; font-weight: 700; color: #1d1d1f; margin: 0.5rem 0 0.3rem 0; letter-spacing: -1px;">
+            🔍 Test Report Analyzer & Summarizer
+        </h1>
+        <p style="color: #86868b; font-size: 0.9rem; margin: 0.3rem 0 0.5rem 0; font-weight: 400;">
+            AI-Powered Test Analysis with Cisco Azure OpenAI
+        </p>
+        <hr style="border: none; height: 2px; background: linear-gradient(to right, transparent, #d2d2d7, transparent); margin-top: 0.5rem;">
+    </div>
+    """, unsafe_allow_html=True)
 
 
 def display_url_input():
@@ -278,7 +887,7 @@ def display_url_input():
         analyze_button = st.button("🔍 Analyze", type="primary", use_container_width=True)
     
     with col3:
-        clear_button = st.button("🗑️ Clear All", use_container_width=True)
+        clear_button = st.button("🗑️ Clear All", type="secondary", use_container_width=True)
     
     return url, analysis_mode, analyze_button, clear_button
 
@@ -288,13 +897,12 @@ def validate_and_convert_url(url: str):
     progress_container = st.empty()
     
     with progress_container.container():
-        with st.status("🔄 Processing URL...", expanded=True) as status:
+        with st.expander("✅ URL Validation", expanded=True):
             # Step 1: Validate URL
             st.write("✓ Validating URL format...")
             url_type = URLConverter.get_url_type(url)
             if url_type == 'unknown':
                 st.error("Invalid URL. Must be a Supernova or Reportio URL.")
-                status.update(label="❌ Invalid URL", state="error")
                 return None, None
             
             st.write(f"✓ Detected URL type: {url_type.upper()}")
@@ -309,11 +917,10 @@ def validate_and_convert_url(url: str):
             
             if not success:
                 st.error(f"Error: {error}")
-                status.update(label="❌ Path conversion failed", state="error")
                 return None, None
             
             st.write(f"✓ Located: `{index_path}`")
-            status.update(label="✅ URL validated successfully", state="complete")
+            st.success("✅ URL validated successfully!")
             
             return index_path, build_info
 
@@ -322,7 +929,7 @@ def run_analysis(index_path: Path, analysis_mode: str, build_info: dict, url: st
     """Run the complete analysis pipeline"""
     results = {}
     
-    with st.status("🔄 Running Analysis...", expanded=True) as status:
+    with st.expander("📊 Running Analysis", expanded=True):
         # Step 1: Extract errors
         st.write("📊 Step 1/3: Extracting errors from test results...")
         
@@ -339,7 +946,6 @@ def run_analysis(index_path: Path, analysis_mode: str, build_info: dict, url: st
         
         if not success:
             st.error(f"Error during analysis: {analyzer_results.get('error', 'Unknown error')}")
-            status.update(label="❌ Analysis failed", state="error")
             return None
         
         st.write(f"✓ Errors extracted to: `{report_path}`")
@@ -369,7 +975,6 @@ def run_analysis(index_path: Path, analysis_mode: str, build_info: dict, url: st
         
         if not success:
             st.error(f"Error during AI analysis: {error}")
-            status.update(label="❌ AI analysis failed", state="error")
             return None
         
         results['summary'] = summary_result
@@ -388,7 +993,7 @@ def run_analysis(index_path: Path, analysis_mode: str, build_info: dict, url: st
         
         results['entry_id'] = entry_id
         
-        status.update(label="✅ Analysis complete!", state="complete")
+        st.success("✅ Analysis complete!")
     
     return results
 
@@ -527,7 +1132,8 @@ def display_results(results: dict):
                 data=report_content,
                 file_name=Path(results['report_path']).name,
                 mime="text/plain",
-                use_container_width=True
+                use_container_width=True,
+                type="secondary"
             )
         except:
             st.error("Error reading report file")
@@ -548,7 +1154,8 @@ def display_results(results: dict):
             data=analysis_content,
             file_name=f"{mode_label}_{results['entry_id']}.txt",
             mime="text/plain",
-            use_container_width=True
+            use_container_width=True,
+            type="secondary"
         )
     
     # Interactive Chat Interface
@@ -556,7 +1163,7 @@ def display_results(results: dict):
     
     # Add "Back to Main Input" button
     st.markdown("---")
-    if st.button("🏠 Back to Main Input", use_container_width=True):
+    if st.button("🏠 Back to Main Input", type="secondary", use_container_width=True):
         # Clear all state to return to input screen
         st.session_state.analysis_complete = False
         st.session_state.current_results = None
@@ -583,7 +1190,7 @@ def display_history():
             st.rerun()
     
     if len(selected_entries) > 0:
-        if st.button("❌ Clear Selection", use_container_width=True):
+        if st.button("❌ Clear Selection", type="secondary", use_container_width=True):
             st.session_state.session_manager.clear_comparison()
             st.rerun()
     
@@ -611,7 +1218,7 @@ def display_history():
                 summary = st.session_state.session_manager.format_history_summary(entry)
                 st.markdown(summary)
                 
-                if st.button("👁️ View", key=f"view_{entry['id']}", use_container_width=True):
+                if st.button("👁️ View", key=f"view_{entry['id']}", type="primary", use_container_width=True):
                     st.session_state.current_results = {
                         'analyzer': entry['analyzer_results'],
                         'summary': entry.get('summary_results'),
@@ -690,7 +1297,7 @@ def display_comparison():
         compare_button = st.button("🔍 Run AI Comparison Analysis", type="primary", use_container_width=True)
         
         if compare_button:
-            with st.status("🔄 Running AI Comparison...", expanded=True) as status:
+            with st.expander("🔍 Running AI Comparison", expanded=True):
                 # Prepare report paths and build names
                 report_paths = []
                 for entry in selected[:2]:  # Compare first 2 for now
@@ -703,7 +1310,6 @@ def display_comparison():
                 
                 if len(report_paths) < 2:
                     st.error("Could not find report files for comparison")
-                    status.update(label="❌ Comparison failed", state="error")
                 else:
                     def progress_callback(message):
                         st.write(f"   {message}")
@@ -717,11 +1323,10 @@ def display_comparison():
                     
                     if success:
                         st.session_state[comparison_key] = result
-                        status.update(label="✅ Comparison complete!", state="complete")
+                        st.success("✅ Comparison complete!")
                         st.rerun()
                     else:
                         st.error(f"Comparison failed: {error}")
-                        status.update(label="❌ Comparison failed", state="error")
     else:
         # Display cached comparison result
         result = st.session_state[comparison_key]
@@ -754,22 +1359,24 @@ def display_comparison():
                 data=result['content'],
                 file_name=comparison_filename,
                 mime="text/plain",
-                use_container_width=True
+                use_container_width=True,
+                type="secondary"
             )
         
         with col2:
             # Clear comparison button
-            if st.button("🔄 Run New Comparison", use_container_width=True):
+            if st.button("🔄 Run New Comparison", type="secondary", use_container_width=True):
                 del st.session_state[comparison_key]
                 st.rerun()
-    
-    # Interactive Chat Interface for Comparison
-    comparison_results = {
-        'comparison_data': comparison_data,
-        'ai_analysis': ai_comparison.get('content', ''),
-        'url': 'comparison'
-    }
-    display_chat_interface(comparison_results, is_comparison=True)
+        
+        # Interactive Chat Interface for Comparison (only if comparison exists)
+        st.markdown("---")
+        comparison_results = {
+            'comparison_result': result,
+            'selected_entries': selected,
+            'url': 'comparison'
+        }
+        display_chat_interface(comparison_results, is_comparison=True)
     
     st.markdown("---")
     
@@ -777,7 +1384,7 @@ def display_comparison():
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("🏠 Back to Main Input", use_container_width=True):
+        if st.button("🏠 Back to Main Input", type="secondary", use_container_width=True):
             # Clear all state to return to input screen
             st.session_state.show_comparison = False
             st.session_state.analysis_complete = False
@@ -786,7 +1393,7 @@ def display_comparison():
             st.rerun()
     
     with col2:
-        if st.button("← Back to Results", use_container_width=True):
+        if st.button("← Back to Results", type="secondary", use_container_width=True):
             # Just go back to results view
             st.session_state.show_comparison = False
             st.rerun()
@@ -808,10 +1415,11 @@ def display_chat_interface(results, is_comparison=False):
     # This ensures each analysis has its own isolated chat history
     if is_comparison:
         # For comparisons, create a unique key from both entry IDs
-        comparison_data = results.get('comparison_data', {})
-        entries = comparison_data.get('entries', [])
-        if len(entries) >= 2:
-            chat_key = f"chat_comparison_{entries[0].get('id', 'a')}_{entries[1].get('id', 'b')}"
+        selected_entries = results.get('selected_entries', [])
+        if len(selected_entries) >= 2:
+            id1 = selected_entries[0].get('id', 'a')
+            id2 = selected_entries[1].get('id', 'b')
+            chat_key = f"chat_comparison_{id1}_{id2}"
         else:
             chat_key = "chat_comparison_unknown"
     else:
@@ -833,7 +1441,7 @@ def display_chat_interface(results, is_comparison=False):
         else:
             st.caption(f"💬 Chat session for this analysis (Session ID: {entry_id[:8]}...)")
     with col2:
-        if st.button("🗑️ Clear Chat", key=f"clear_{chat_key}", use_container_width=True):
+        if st.button("🗑️ Clear Chat", key=f"clear_{chat_key}", type="secondary", use_container_width=True):
             st.session_state[chat_key] = []
             st.rerun()
     
@@ -876,33 +1484,37 @@ def display_chat_interface(results, is_comparison=False):
                         
                         if is_comparison:
                             # Comparison chat
-                            comparison_data = results.get('comparison_data', {})
-                            entries = comparison_data.get('entries', [])
+                            selected_entries = results.get('selected_entries', [])
+                            comparison_result = results.get('comparison_result', {})
                             
-                            if len(entries) >= 2:
+                            if len(selected_entries) >= 2:
                                 # Get report contents
-                                report1_path = entries[0].get('error_report_path')
-                                report2_path = entries[1].get('error_report_path')
-                                build1_name = entries[0].get('build_name', 'Build 1')
-                                build2_name = entries[1].get('build_name', 'Build 2')
+                                report1_path = selected_entries[0].get('analyzer_results', {}).get('report_path')
+                                report2_path = selected_entries[1].get('analyzer_results', {}).get('report_path')
+                                build1_name = selected_entries[0].get('build_info', {}).get('build_name', 'Build 1')
+                                build2_name = selected_entries[1].get('build_info', {}).get('build_name', 'Build 2')
                                 
-                                # Read report files
-                                with open(report1_path, 'r') as f:
-                                    report1_content = f.read()
-                                with open(report2_path, 'r') as f:
-                                    report2_content = f.read()
-                                
-                                comparison_summary = results.get('ai_analysis', '')
-                                
-                                success, ai_response, error = summarizer.chat_comparison(
-                                    report1_content,
-                                    report2_content,
-                                    comparison_summary,
-                                    build1_name,
-                                    build2_name,
-                                    chat_history[:-1],  # Exclude the just-added user message
-                                    user_input
-                                )
+                                if report1_path and report2_path:
+                                    # Read report files
+                                    with open(report1_path, 'r') as f:
+                                        report1_content = f.read()
+                                    with open(report2_path, 'r') as f:
+                                        report2_content = f.read()
+                                    
+                                    comparison_summary = comparison_result.get('content', '')
+                                    
+                                    success, ai_response, error = summarizer.chat_comparison(
+                                        report1_content,
+                                        report2_content,
+                                        comparison_summary,
+                                        build1_name,
+                                        build2_name,
+                                        chat_history[:-1],  # Exclude the just-added user message
+                                        user_input
+                                    )
+                                else:
+                                    success = False
+                                    error = "Could not find report paths"
                             else:
                                 success = False
                                 error = "Not enough comparison data"
@@ -964,7 +1576,7 @@ def main():
         st.title("History & Comparison")
         display_history()
         
-        if st.button("🗑️ Clear History", use_container_width=True):
+        if st.button("🗑️ Clear History", type="secondary", use_container_width=True):
             st.session_state.session_manager.clear_history()
             st.session_state.analysis_complete = False
             st.session_state.current_results = None

@@ -285,7 +285,8 @@ class SummarizerWrapper:
                     report1_content,
                     report2_content,
                     build1_name,
-                    build2_name
+                    build2_name,
+                    callback=callback  # Pass callback for chunking progress
                 )
                 
                 self.last_analysis = comparison_result

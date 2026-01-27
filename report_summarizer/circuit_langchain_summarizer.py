@@ -734,9 +734,9 @@ Keep FAILED and SKIPPED analysis completely separate to identify whether problem
     return [system_message, human_message]
 
 
-def compare_reports(llm, report1_content, report2_content, build1_name, build2_name):
+def compare_reports(llm, report1_content, report2_content, build1_name, build2_name, callback=None):
     """
-    Compare two test reports using AI analysis.
+    Compare two test reports using AI analysis with automatic chunking if needed.
     
     Args:
         llm: Initialized AzureChatOpenAI instance
@@ -744,13 +744,354 @@ def compare_reports(llm, report1_content, report2_content, build1_name, build2_n
         report2_content: Content of the second test report
         build1_name: Name of the first build
         build2_name: Name of the second build
+        callback: Optional callback function for progress updates
         
     Returns:
         dict: Comparison results containing content, metadata, and usage info
     """
-    messages = create_comparison_prompt(report1_content, report2_content, build1_name, build2_name)
+    # Estimate token count (rough: 4 chars = 1 token)
+    total_chars = len(report1_content) + len(report2_content)
+    estimated_tokens = total_chars / 4
     
-    print(f"\n[Sending to Azure OpenAI for comparison analysis of {build1_name} vs {build2_name}...]")
+    # Azure OpenAI GPT-4 has 128K context, but we need room for prompt + response
+    # Safe limit: ~100K tokens for input = ~400K characters total
+    MAX_SAFE_CHARS = 400000
+    
+    if total_chars <= MAX_SAFE_CHARS:
+        # Reports are small enough, compare directly
+        messages = create_comparison_prompt(report1_content, report2_content, build1_name, build2_name)
+        
+        print(f"\n[Sending to Azure OpenAI for comparison analysis of {build1_name} vs {build2_name}...]")
+        response = llm.invoke(messages)
+        
+        return {
+            'content': response.content,
+            'metadata': response.response_metadata,
+            'message_id': response.id,
+            'usage': response.usage_metadata
+        }
+    else:
+        # Reports are too large, use chunking strategy
+        msg = f"Large comparison detected (~{int(estimated_tokens):,} tokens). Using intelligent chunking..."
+        print(f"\n[{msg}]")
+        if callback:
+            callback(msg)
+        
+        return compare_reports_chunked(llm, report1_content, report2_content, build1_name, build2_name, callback)
+
+
+def compare_reports_chunked(llm, report1_content, report2_content, build1_name, build2_name, callback=None):
+    """
+    Compare two large test reports using chunking strategy.
+    
+    Strategy:
+    1. Extract summary sections from both reports (always small)
+    2. Chunk the failures sections from both reports
+    3. Compare summaries first (overview)
+    4. Compare corresponding failure chunks
+    5. Combine all comparisons into final analysis
+    
+    Args:
+        llm: Initialized AzureChatOpenAI instance
+        report1_content: Content of the first test report
+        report2_content: Content of the second test report
+        build1_name: Name of the first build
+        build2_name: Name of the second build
+        callback: Optional callback function for progress updates
+        
+    Returns:
+        dict: Combined comparison results
+    """
+    msg = "Step 1/3: Extracting summaries and splitting failures..."
+    print(f"[{msg}]")
+    if callback:
+        callback(msg)
+    
+    # Split each report into summary and failures
+    report1_summary, report1_failures = extract_summary_and_failures(report1_content)
+    report2_summary, report2_failures = extract_summary_and_failures(report2_content)
+    
+    # Chunk the failures sections - use smaller chunks to be safe
+    chunk_size = 50000  # ~12K tokens per chunk (safer for comparison)
+    report1_failure_chunks = split_text_into_chunks(report1_failures, chunk_size)
+    report2_failure_chunks = split_text_into_chunks(report2_failures, chunk_size)
+    
+    print(f"[DEBUG] Report 1 split into {len(report1_failure_chunks)} chunks")
+    print(f"[DEBUG] Report 2 split into {len(report2_failure_chunks)} chunks")
+    
+    num_chunks = max(len(report1_failure_chunks), len(report2_failure_chunks))
+    
+    msg = f"Step 2/3: Comparing {num_chunks} chunk pairs..."
+    print(f"[{msg}]")
+    if callback:
+        callback(msg)
+    
+    # Compare summaries first (always do this)
+    summary_comparison = compare_summaries(llm, report1_summary, report2_summary, build1_name, build2_name)
+    
+    # Safety: if no chunks found, compare the full failure sections directly
+    if num_chunks == 0 and (report1_failures or report2_failures):
+        print("[DEBUG] No chunks created, comparing full failure sections directly")
+        msg = "Comparing full failure sections (no chunking needed)..."
+        print(f"[{msg}]")
+        if callback:
+            callback(msg)
+        
+        # Compare directly without chunking
+        comparison = compare_failure_chunks(llm, report1_failures, report2_failures, 
+                                           build1_name, build2_name, 1, 1)
+        chunk_comparisons = [comparison]
+    else:
+        # Compare failure chunks
+        chunk_comparisons = []
+        for i in range(num_chunks):
+            chunk1 = report1_failure_chunks[i] if i < len(report1_failure_chunks) else ""
+            chunk2 = report2_failure_chunks[i] if i < len(report2_failure_chunks) else ""
+            
+            if chunk1 or chunk2:  # Skip if both are empty
+                msg = f"  Comparing failure chunk {i+1}/{num_chunks}..."
+                print(f"[{msg}]")
+                if callback:
+                    callback(msg)
+                
+                comparison = compare_failure_chunks(llm, chunk1, chunk2, build1_name, build2_name, i+1, num_chunks)
+                chunk_comparisons.append(comparison)
+    
+    msg = "Step 3/3: Combining all comparisons into final analysis..."
+    print(f"[{msg}]")
+    if callback:
+        callback(msg)
+    
+    # Combine all comparisons
+    final_comparison = combine_chunk_comparisons(llm, summary_comparison, chunk_comparisons, build1_name, build2_name)
+    
+    return final_comparison
+
+
+def extract_summary_and_failures(report_content):
+    """
+    Extract CONDENSED summary and failures section from a report.
+    
+    Actual report format from test_results_analyzer_full_error.py:
+    - OVERALL SUMMARY: (with PASS, FAIL, ERROR counts)
+    - Total Tests: X
+    - Failed/Error Tests: Y
+    - Pass Rate: Z%
+    - FAILURES & ERRORS: (this is where failures start)
+    """
+    lines = report_content.split('\n')
+    
+    # Extract key statistics
+    summary_stats = {
+        'total': 0,
+        'pass': 0,
+        'fail': 0,
+        'error': 0,
+        'not_run': 0
+    }
+    
+    failure_lines = []
+    in_failures = False
+    
+    for line in lines:
+        # Look for the FAILURES & ERRORS section - this is the actual marker!
+        if 'FAILURES & ERRORS:' in line or 'FAILURES AND ERRORS:' in line:
+            in_failures = True
+            failure_lines.append(line)
+            continue
+        
+        # Extract stats from lines like "  Total Tests: 174"
+        if not in_failures:
+            if 'Total Tests:' in line:
+                try:
+                    summary_stats['total'] = int(line.split(':')[1].strip())
+                except:
+                    pass
+            elif 'Failed/Error Tests:' in line:
+                try:
+                    summary_stats['fail'] = int(line.split(':')[1].strip())
+                except:
+                    pass
+            elif 'PASS:' in line:
+                try:
+                    summary_stats['pass'] = int(line.split(':')[1].strip())
+                except:
+                    pass
+            elif 'FAIL:' in line and 'Failed' not in line:
+                try:
+                    summary_stats['fail'] = int(line.split(':')[1].strip())
+                except:
+                    pass
+            elif 'ERROR:' in line:
+                try:
+                    summary_stats['error'] = int(line.split(':')[1].strip())
+                except:
+                    pass
+        
+        if in_failures:
+            failure_lines.append(line)
+    
+    # Create a condensed summary
+    total = summary_stats['total']
+    passed = summary_stats['pass']
+    failed = summary_stats['fail'] + summary_stats['error']
+    
+    pass_pct = (passed / total * 100) if total > 0 else 0
+    fail_pct = (failed / total * 100) if total > 0 else 0
+    
+    condensed_summary = f"""Test Results Summary:
+- Total Tests: {total}
+- Passed: {passed} ({pass_pct:.1f}%)
+- Failed/Error: {failed} ({fail_pct:.1f}%)
+"""
+    
+    failures_text = '\n'.join(failure_lines)
+    
+    # Debug: print what we found
+    print(f"[DEBUG] Extracted summary stats: {summary_stats}")
+    print(f"[DEBUG] Found {len(failure_lines)} failure lines")
+    print(f"[DEBUG] Failures section size: {len(failures_text)} characters")
+    
+    # Fallback: if we didn't find any failures section, just use the whole report
+    # (this handles cases where the format is different or there's a parsing issue)
+    if len(failures_text) < 100:  # Too small, probably didn't find it
+        print("[DEBUG] Failures section too small, using entire report as fallback")
+        failures_text = report_content
+    
+    return condensed_summary, failures_text
+
+
+def split_text_into_chunks(text, chunk_size):
+    """Split text into chunks of approximately chunk_size characters."""
+    if len(text) <= chunk_size:
+        return [text] if text else []
+    
+    chunks = []
+    lines = text.split('\n')
+    current_chunk = []
+    current_size = 0
+    
+    for line in lines:
+        line_size = len(line) + 1  # +1 for newline
+        
+        if current_size + line_size > chunk_size and current_chunk:
+            # Save current chunk and start new one
+            chunks.append('\n'.join(current_chunk))
+            current_chunk = [line]
+            current_size = line_size
+        else:
+            current_chunk.append(line)
+            current_size += line_size
+    
+    # Add final chunk
+    if current_chunk:
+        chunks.append('\n'.join(current_chunk))
+    
+    return chunks
+
+
+def compare_summaries(llm, summary1, summary2, build1_name, build2_name):
+    """Compare summary sections of two reports."""
+    # Additional safety: truncate summaries if still too large
+    max_summary_chars = 10000  # ~2.5K tokens per summary
+    if len(summary1) > max_summary_chars:
+        summary1 = summary1[:max_summary_chars] + "\n... (truncated)"
+    if len(summary2) > max_summary_chars:
+        summary2 = summary2[:max_summary_chars] + "\n... (truncated)"
+    
+    prompt = f"""Compare the SUMMARY sections of these two test builds:
+
+BUILD 1: {build1_name}
+{summary1}
+
+BUILD 2: {build2_name}
+{summary2}
+
+Provide a brief overview comparison focusing on:
+- Test count changes (total, passed, failed, skipped)
+- Pass rate trends
+- Overall quality direction (improving/declining/stable)
+
+Keep it concise (3-5 sentences)."""
+
+    messages = [SystemMessage(content="You are a test automation expert."), HumanMessage(content=prompt)]
+    response = llm.invoke(messages)
+    return response.content
+
+
+def compare_failure_chunks(llm, chunk1, chunk2, build1_name, build2_name, chunk_num, total_chunks):
+    """Compare failure chunks from two reports."""
+    # Safety truncation for individual chunks
+    max_chunk_chars = 45000  # ~11K tokens per chunk, leaves room for prompt
+    if len(chunk1) > max_chunk_chars:
+        chunk1 = chunk1[:max_chunk_chars] + "\n... (truncated)"
+    if len(chunk2) > max_chunk_chars:
+        chunk2 = chunk2[:max_chunk_chars] + "\n... (truncated)"
+    
+    prompt = f"""Compare FAILURE CHUNK {chunk_num} of {total_chunks} from these two test builds:
+
+BUILD 1 ({build1_name}) FAILURES:
+{chunk1 if chunk1 else "(No failures in this chunk)"}
+
+BUILD 2 ({build2_name}) FAILURES:
+{chunk2 if chunk2 else "(No failures in this chunk)"}
+
+Identify:
+1. Common failures (persistent issues)
+2. New failures in Build 2 (regressions)
+3. Resolved failures in Build 2 (fixes)
+4. Patterns in this chunk
+
+Be concise and focus on actionable insights."""
+
+    messages = [SystemMessage(content="You are a test automation expert."), HumanMessage(content=prompt)]
+    response = llm.invoke(messages)
+    return response.content
+
+
+def combine_chunk_comparisons(llm, summary_comparison, chunk_comparisons, build1_name, build2_name):
+    """Combine all chunk comparisons into a final comprehensive comparison."""
+    all_comparisons = f"""SUMMARY COMPARISON:
+{summary_comparison}
+
+FAILURE COMPARISONS:
+"""
+    
+    for i, chunk_comp in enumerate(chunk_comparisons, 1):
+        all_comparisons += f"\n\nChunk {i}:\n{chunk_comp}"
+    
+    prompt = f"""You are analyzing a comparison between two test builds: {build1_name} vs {build2_name}.
+
+Here are the individual comparison results:
+
+{all_comparisons}
+
+Synthesize these into a COMPREHENSIVE FINAL COMPARISON with:
+
+1. OVERVIEW COMPARISON
+   - Overall test count trends
+   - Pass rate changes
+   - Quality direction
+
+2. KEY FINDINGS
+   - Most critical failures (persistent or new)
+   - Major improvements (resolved issues)
+   - Patterns across all failures
+
+3. FAILED vs SKIPPED ANALYSIS
+   - Separate code issues (FAILED) from environment issues (SKIPPED)
+   - Which category needs more attention?
+
+4. ACTIONABLE RECOMMENDATIONS
+   - Top 3-5 priority items
+   - Clear next steps
+
+Make it concise but comprehensive, focusing on what matters most."""
+
+    messages = [SystemMessage(content="You are a test automation expert creating a final comparison report."), 
+                HumanMessage(content=prompt)]
+    
+    print(f"\n[Generating final comparison report...]")
     response = llm.invoke(messages)
     
     return {
