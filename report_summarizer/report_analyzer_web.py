@@ -1433,6 +1433,14 @@ def display_chat_interface(results, is_comparison=False):
     
     chat_history = st.session_state[chat_key]
     
+    # Check if AI is currently processing
+    # Initialize processing flag for this chat if not exists
+    processing_key = f"processing_{chat_key}"
+    if processing_key not in st.session_state:
+        st.session_state[processing_key] = False
+    
+    is_processing = st.session_state[processing_key]
+    
     # Show chat session info and clear button
     col1, col2 = st.columns([4, 1])
     with col1:
@@ -1441,8 +1449,12 @@ def display_chat_interface(results, is_comparison=False):
         else:
             st.caption(f"💬 Chat session for this analysis (Session ID: {entry_id[:8]}...)")
     with col2:
-        if st.button("🗑️ Clear Chat", key=f"clear_{chat_key}", type="secondary", use_container_width=True):
+        # Disable Clear Chat button when AI is processing
+        clear_button_disabled = is_processing
+        if st.button("🗑️ Clear Chat", key=f"clear_{chat_key}", type="secondary", use_container_width=True, disabled=clear_button_disabled):
             st.session_state[chat_key] = []
+            # Also reset processing flag when clearing chat
+            st.session_state[processing_key] = False
             st.rerun()
     
     # Display chat messages
@@ -1462,102 +1474,117 @@ def display_chat_interface(results, is_comparison=False):
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
     
-    # Chat input
-    user_input = st.chat_input("Ask a question about this report...")
+    # Chat input - disable when AI is processing
+    if is_processing:
+        st.chat_input("⏳ AI is thinking, please wait...", disabled=True)
+        user_input = None
+    else:
+        user_input = st.chat_input("Ask a question about this report...")
     
     if user_input:
-        # Add user message to chat history
+        # Add user message to chat history first
         chat_history.append({"role": "user", "content": user_input})
+        st.session_state[chat_key] = chat_history
         
-        # Display user message
-        with chat_container:
-            with st.chat_message("user"):
-                st.markdown(user_input)
+        # Set processing flag to True and rerun to show disabled state
+        st.session_state[processing_key] = True
+        st.rerun()
+    
+    # If processing flag is True, we need to process the last user message
+    if is_processing and len(chat_history) > 0 and chat_history[-1]["role"] == "user":
+        # Get the last user message
+        user_question = chat_history[-1]["content"]
         
         # Get AI response
-        with chat_container:
-            with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
-                    try:
-                        # Initialize summarizer
-                        summarizer = SummarizerWrapper()
-                        
-                        if is_comparison:
-                            # Comparison chat
-                            selected_entries = results.get('selected_entries', [])
-                            comparison_result = results.get('comparison_result', {})
+        try:
+            with chat_container:
+                with st.chat_message("assistant"):
+                    with st.spinner("Thinking..."):
+                        try:
+                            # Initialize summarizer
+                            summarizer = SummarizerWrapper()
                             
-                            if len(selected_entries) >= 2:
-                                # Get report contents
-                                report1_path = selected_entries[0].get('analyzer_results', {}).get('report_path')
-                                report2_path = selected_entries[1].get('analyzer_results', {}).get('report_path')
-                                build1_name = selected_entries[0].get('build_info', {}).get('build_name', 'Build 1')
-                                build2_name = selected_entries[1].get('build_info', {}).get('build_name', 'Build 2')
+                            if is_comparison:
+                                # Comparison chat
+                                selected_entries = results.get('selected_entries', [])
+                                comparison_result = results.get('comparison_result', {})
                                 
-                                if report1_path and report2_path:
-                                    # Read report files
-                                    with open(report1_path, 'r') as f:
-                                        report1_content = f.read()
-                                    with open(report2_path, 'r') as f:
-                                        report2_content = f.read()
+                                if len(selected_entries) >= 2:
+                                    # Get report contents
+                                    report1_path = selected_entries[0].get('analyzer_results', {}).get('report_path')
+                                    report2_path = selected_entries[1].get('analyzer_results', {}).get('report_path')
+                                    build1_name = selected_entries[0].get('build_info', {}).get('build_name', 'Build 1')
+                                    build2_name = selected_entries[1].get('build_info', {}).get('build_name', 'Build 2')
                                     
-                                    comparison_summary = comparison_result.get('content', '')
-                                    
-                                    success, ai_response, error = summarizer.chat_comparison(
-                                        report1_content,
-                                        report2_content,
-                                        comparison_summary,
-                                        build1_name,
-                                        build2_name,
-                                        chat_history[:-1],  # Exclude the just-added user message
-                                        user_input
-                                    )
+                                    if report1_path and report2_path:
+                                        # Read report files
+                                        with open(report1_path, 'r') as f:
+                                            report1_content = f.read()
+                                        with open(report2_path, 'r') as f:
+                                            report2_content = f.read()
+                                        
+                                        comparison_summary = comparison_result.get('content', '')
+                                        
+                                        success, ai_response, error = summarizer.chat_comparison(
+                                            report1_content,
+                                            report2_content,
+                                            comparison_summary,
+                                            build1_name,
+                                            build2_name,
+                                            chat_history[:-1],  # Exclude the just-added user message
+                                            user_question
+                                        )
+                                    else:
+                                        success = False
+                                        error = "Could not find report paths"
                                 else:
                                     success = False
-                                    error = "Could not find report paths"
+                                    error = "Not enough comparison data"
                             else:
-                                success = False
-                                error = "Not enough comparison data"
-                        else:
-                            # Single report chat
-                            error_report_path = results.get('report_path')  # Fixed: was 'error_report_path', should be 'report_path'
-                            ai_summary = results.get('summary', {}).get('content', '')  # Fixed: get content from summary dict
+                                # Single report chat
+                                error_report_path = results.get('report_path')
+                                ai_summary = results.get('summary', {}).get('content', '')
+                                
+                                if not error_report_path:
+                                    st.error("❌ Error: Report path not found. Please re-run the analysis.")
+                                    chat_history.append({"role": "assistant", "content": "❌ Error: Report path not found. Please re-run the analysis."})
+                                    st.session_state[chat_key] = chat_history
+                                    # Reset processing flag before rerun
+                                    st.session_state[processing_key] = False
+                                    st.rerun()
+                                    return
+                                
+                                # Read report file
+                                with open(error_report_path, 'r') as f:
+                                    report_content = f.read()
+                                
+                                success, ai_response, error = summarizer.chat(
+                                    report_content,
+                                    ai_summary,
+                                    chat_history[:-1],  # Exclude the just-added user message
+                                    user_question
+                                )
                             
-                            if not error_report_path:
-                                st.error("❌ Error: Report path not found. Please re-run the analysis.")
-                                chat_history.append({"role": "assistant", "content": "❌ Error: Report path not found. Please re-run the analysis."})
-                                st.session_state[chat_key] = chat_history
-                                st.rerun()
-                                return
-                            
-                            # Read report file
-                            with open(error_report_path, 'r') as f:
-                                report_content = f.read()
-                            
-                            success, ai_response, error = summarizer.chat(
-                                report_content,
-                                ai_summary,
-                                chat_history[:-1],  # Exclude the just-added user message
-                                user_input
-                            )
+                            if success:
+                                st.markdown(ai_response)
+                                # Add AI response to chat history
+                                chat_history.append({"role": "assistant", "content": ai_response})
+                            else:
+                                error_msg = f"❌ Error: {error}"
+                                st.error(error_msg)
+                                # Add error to chat history
+                                chat_history.append({"role": "assistant", "content": error_msg})
                         
-                        if success:
-                            st.markdown(ai_response)
-                            # Add AI response to chat history
-                            chat_history.append({"role": "assistant", "content": ai_response})
-                        else:
-                            error_msg = f"❌ Error: {error}"
+                        except Exception as e:
+                            import traceback
+                            error_msg = f"❌ Error getting AI response: {str(e)}"
                             st.error(error_msg)
+                            traceback.print_exc()
                             # Add error to chat history
                             chat_history.append({"role": "assistant", "content": error_msg})
-                    
-                    except Exception as e:
-                        import traceback
-                        error_msg = f"❌ Error getting AI response: {str(e)}"
-                        st.error(error_msg)
-                        traceback.print_exc()
-                        # Add error to chat history
-                        chat_history.append({"role": "assistant", "content": error_msg})
+        finally:
+            # Always reset processing flag when done (success or error)
+            st.session_state[processing_key] = False
         
         # Update session state
         st.session_state[chat_key] = chat_history
